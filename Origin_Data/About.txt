@@ -1,0 +1,25 @@
+About Dataset
+This is the data of a mobile game of casual level climbing, in which users are constantly climbing levels. The basic task of each level is to reach a certain goal within a limited number of steps. Each level may or may not be successful, and generally users only move on to the next level after completing one level, using props or hints to help them along the way.
+
+For most mobile games, churn happens early on, so retention is a big concern. This data selects the interactive data of all users registered in 2.1 to 2.4 of 2020.2.1. The data is filtered to ensure that these registered users have logged in at least two days in the previous four days. The definition of loss refers to the logon situation of the next week (2.7-2.13). If there is no logon, it is loss.
+
+The data of this time is different from the previous structured form, showing a more original data record, which is closer to the form of the company's actual log, including 5 files:
+
+1.train.csv- Train the user, including the user id (starting from 1) and the corresponding label (1: lost, 0: retained) of the lost user.
+2.dev.csv - The verification set format is the same as the training set, mainly for the convenience of off-line testing and model selection.
+3.test.csv - The test set contains only user ids, and the task is to predict the churn rate of these users.
+4.level_seq.csv - This is the core data file, which contains the user's record of playing each level. Each record is an attempt to play a level. The meaning of each column is as follows:
+    'user_id' : user id, which can be matched with those in training, verification, and test sets;
+    'level_id' : level id;
+    f_success ': indicates whether to complete the clearance (1: completes the clearance, 0: fails).
+    f_duration ': the duration of the attempt (unit: s);
+    f_reststep ': the ratio of the remaining steps to the limited steps (failure is 0);
+    f_help ': Whether extra help, such as props and hints, was used (1: used, 0: not used);
+    'time' : indicates the timestamp.
+5.level_meta.csv- Some statistical characteristics of each level can be used to represent the level. The meaning of each column is as follows:
+    f_avg_duration ': Average time spent on each attempt (unit s, including successful and failed attempts);
+    'f_avg_passrate' : average clearance rate;
+    f_avg_win_duration ': Average time spent on each clearance (in s, including only the attempts to clear the clearance);
+    f_avg_retrytimes' : Average number of retries (the second time to play the same level counts as the first retry);
+    'level_id' : indicates the id of the level, which can be matched with the level in level_seq.csv.
+Based on the actual data given (including user play history, level characteristics, etc.), predict whether users in the test set are lost users (dichotomies);

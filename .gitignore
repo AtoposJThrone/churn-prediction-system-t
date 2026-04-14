@@ -1,0 +1,13 @@
+churn-manager/target/
+churn-manager/runtime/
+churn-manager/*.log
+churn-manager/*.mv.db
+churn-manager/*.trace.db
+churn-manager/.idea/
+*.swp
+old/
+Origin_Data/*.csv
+Graduation_Project_Documents/
+Documents/*.md
+DATA_Processing_Center(FOR Rederence)/
+.vscode/
