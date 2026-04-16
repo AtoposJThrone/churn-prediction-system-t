@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据仪表盘 — 用户流失预测管理系统</title>
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo"><span>🏰</span> ChurnManager</div>
+    <div class="sidebar-nav">
+      <a href="projects.html"  class="nav-item">📁 项目管理</a>
+      <a href="dashboard.html" class="nav-item active">📊 数据仪表盘</a>
+    </div>
+    <div class="sidebar-footer">
+      <div>已登录：<span id="userLabel"></span></div>
+      <button class="logout-btn mt-8" id="logoutBtn">退出登录</button>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">数据仪表盘</span>
+      <div class="flex-center" style="gap:8px;">
+        <select id="projectSelect" class="form-control" style="width:220px;padding:5px 8px;font-size:.85rem;">
+          <option value="">使用内置演示数据</option>
+        </select>
+        <button id="loadBtn" class="btn btn-primary btn-sm">加载 / 刷新</button>
+      </div>
+    </div>
+    <div class="page">
+      <div id="flash"></div>
+      <p id="dataSourceLabel" class="text-muted" style="font-size:.8rem;margin-bottom:10px;"></p>
+
+      <!-- KPI tiles -->
+      <div class="kpi-row">
+        <div class="kpi-tile">
+          <div class="kpi-label">活跃用户总数</div>
+          <div class="kpi-value primary" id="kpiTotal">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">高风险用户</div>
+          <div class="kpi-value danger" id="kpiHigh">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">中风险用户</div>
+          <div class="kpi-value warning" id="kpiMedium">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">高风险率</div>
+          <div class="kpi-value danger" id="kpiRate">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">平均流失概率</div>
+          <div class="kpi-value warning" id="kpiAvgProb">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">数据日期</div>
+          <div class="kpi-value" style="font-size:1.1rem;" id="kpiDate">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">TOP 卡关关卡</div>
+          <div class="kpi-value primary" id="kpiStuckMap">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">首日未过关数</div>
+          <div class="kpi-value warning" id="kpiNoTutorial">—</div>
+        </div>
+      </div>
+
+      <!-- Charts row 1: pie + trend -->
+      <div class="charts-grid">
+        <div class="chart-box">
+          <div class="chart-title">用户风险等级分布</div>
+          <div class="chart-area" id="pieChart"></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">风险等级趋势</div>
+          <div class="chart-area" id="trendChart"></div>
+        </div>
+      </div>
+
+      <!-- Charts row 2: model comparison + churn prob dist -->
+      <div class="charts-grid">
+        <div class="chart-box">
+          <div class="chart-title">模型性能对比（AUC / F1）</div>
+          <div class="chart-area" id="modelChart"></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">用户流失概率分布</div>
+          <div class="chart-area" id="distChart"></div>
+        </div>
+      </div>
+
+      <!-- Feature importance full width -->
+      <div class="charts-grid">
+        <div class="chart-box full">
+          <div class="chart-title">特征重要性（随机森林 Top 12）</div>
+          <div class="chart-area" style="height:320px;" id="featChart"></div>
+        </div>
+      </div>
+
+      <!-- Alert table -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="card-header" style="padding:14px 20px;border-bottom:1px solid var(--border);">
+          <span class="card-title">近期告警用户（Top 50）</span>
+        </div>
+        <div class="table-responsive">
+          <table class="styled">
+            <thead><tr>
+              <th>用户 ID</th><th>流失概率</th><th>风险等级</th><th>告警状态</th><th>主要原因</th>
+            </tr></thead>
+            <tbody id="alertTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>项目管理 — 用户流失预测管理系统</title>
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <span>🏰</span> ChurnManager
+    </div>
+    <div class="sidebar-nav">
+      <a href="projects.html"  class="nav-item active">📁 项目管理</a>
+      <a href="dashboard.html" class="nav-item">📊 数据仪表盘</a>
+    </div>
+    <div class="sidebar-footer">
+      <div>已登录：<span id="userLabel"></span></div>
+      <button class="logout-btn mt-8" id="logoutBtn">退出登录</button>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">项目管理</span>
+      <button class="btn btn-primary btn-sm" id="newProjectBtn">＋ 新建项目</button>
+    </div>
+    <div class="page">
+      <div id="flash"></div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="table-responsive">
+          <table class="styled">
+            <thead>
+              <tr>
+                <th>项目名称</th>
+                <th>描述</th>
+                <th>主机</th>
+                <th>创建时间</th>
+                <th>更新时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="projectsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Project Modal -->
+<div class="modal-overlay hidden" id="projectModal">
+  <div class="modal modal-xl">
+    <div class="modal-header">
+      <span class="modal-title" id="modalTitle">新建项目</span>
+      <button class="modal-close" onclick="closeModal('projectModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="projectForm" autocomplete="off">
+        <!-- 基本信息 -->
+        <p class="nav-section-title" style="padding:0;margin-bottom:10px;color:#888;">基本信息</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">项目名称 <span class="required">*</span></label>
+            <input name="name" type="text" class="form-control" placeholder="唯一标识名">
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input name="description" type="text" class="form-control" placeholder="简短描述">
+          </div>
+        </div>
+
+        <!-- SSH -->
+        <p class="nav-section-title" style="padding:0;margin-bottom:10px;margin-top:8px;color:#888;">SSH 连接</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">主机地址</label>
+            <input name="host" type="text" class="form-control" placeholder="192.168.1.100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">SSH 端口</label>
+            <input name="sshPort" type="number" class="form-control" value="22">
+          </div>
+        </div>
+        <div class="form-row-3">
+          <div class="form-group">
+            <label class="form-label">SSH 用户名</label>
+            <input name="sshUsername" type="text" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">SSH 密码 <span class="text-muted">(留空不修改)</span></label>
+            <input name="sshPassword" type="password" class="form-control" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label class="form-label">私钥路径 <span class="text-muted">(留空不修改)</span></label>
+            <input name="sshPrivateKey" type="text" class="form-control" placeholder="/home/user/.ssh/id_rsa">
+          </div>
+        </div>
+        <!-- Test connection -->
+        <div class="flex-center mt-8">
+          <button type="button" class="btn btn-outline btn-sm" id="testConnBtn">⚡ 测试连接</button>
+          <span id="connResult" style="font-size:.83rem;"></span>
+        </div>
+
+        <!-- 目录配置 -->
+        <p class="nav-section-title" style="padding:0;margin-bottom:10px;margin-top:14px;color:#888;">项目目录</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">项目根目录</label>
+            <input name="projectRoot" type="text" class="form-control" placeholder="/data/churn-project">
+          </div>
+          <div class="form-group">
+            <label class="form-label">脚本目录</label>
+            <input name="scriptsDir" type="text" class="form-control" placeholder="留空则为 projectRoot/scripts">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">告警输出目录</label>
+            <input name="alertOutputDir" type="text" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">实验结果目录</label>
+            <input name="experimentResultsDir" type="text" class="form-control">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">日志目录</label>
+            <input name="logsDir" type="text" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">图表目录</label>
+            <input name="plotsDir" type="text" class="form-control">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">原始数据目录</label>
+            <input name="originDataDir" type="text" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">转换数据目录</label>
+            <input name="transformedDataDir" type="text" class="form-control">
+          </div>
+        </div>
+
+        <!-- 命令配置 -->
+        <p class="nav-section-title" style="padding:0;margin-bottom:10px;margin-top:8px;color:#888;">执行命令</p>
+        <div class="form-row-3">
+          <div class="form-group">
+            <label class="form-label">Python 命令</label>
+            <input name="pythonCommand" type="text" class="form-control" placeholder="python3">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Spark Submit</label>
+            <input name="sparkSubmitCommand" type="text" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Beeline 命令</label>
+            <input name="beelineCommand" type="text" class="form-control">
+          </div>
+        </div>
+
+        <!-- Hive / HDFS -->
+        <p class="nav-section-title" style="padding:0;margin-bottom:10px;margin-top:8px;color:#888;">Hive / HDFS</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Hive 数据库名</label>
+            <input name="hiveDb" type="text" class="form-control" placeholder="churn_db">
+          </div>
+          <div class="form-group">
+            <label class="form-label">HDFS 落地目录</label>
+            <input name="hdfsLandingDir" type="text" class="form-control">
+          </div>
+        </div>
+        <div class="form-row-3">
+          <div class="form-group">
+            <label class="form-label">Hive JDBC URL</label>
+            <input name="hiveJdbcUrl" type="text" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Hive 用户名</label>
+            <input name="hiveUsername" type="text" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Hive 密码 <span class="text-muted">(留空不修改)</span></label>
+            <input name="hivePassword" type="password" class="form-control" autocomplete="new-password">
+          </div>
+        </div>
+
+        <!-- MySQL ADS -->
+        <p class="nav-section-title" style="padding:0;margin-bottom:10px;margin-top:8px;color:#888;">MySQL ADS（仪表盘）</p>
+        <div class="form-row-3">
+          <div class="form-group">
+            <label class="form-label">MySQL JDBC URL</label>
+            <input name="mysqlUrl" type="text" class="form-control" placeholder="jdbc:mysql://host:3306/db">
+          </div>
+          <div class="form-group">
+            <label class="form-label">用户名</label>
+            <input name="mysqlUsername" type="text" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">密码 <span class="text-muted">(留空不修改)</span></label>
+            <input name="mysqlPassword" type="password" class="form-control" autocomplete="new-password">
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="cancelModalBtn">取消</button>
+      <button class="btn btn-primary" id="saveProjectBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay hidden" id="deleteModal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header">
+      <span class="modal-title">确认删除</span>
+      <button class="modal-close" onclick="closeModal('deleteModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>确认删除项目 <strong id="deleteProjectName"></strong>？此操作不可恢复，关联的 Pipeline、调度和任务记录均会被删除。</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="cancelDeleteBtn">取消</button>
+      <button class="btn btn-danger"  id="confirmDeleteBtn">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/projects.js"></script>
+</body>
+</html>

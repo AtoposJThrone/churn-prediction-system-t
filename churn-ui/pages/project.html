@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>项目详情 — 用户流失预测管理系统</title>
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo"><span>🏰</span> ChurnManager</div>
+    <div class="sidebar-nav">
+      <a href="projects.html"  class="nav-item active">📁 项目管理</a>
+      <a href="dashboard.html" class="nav-item">📊 数据仪表盘</a>
+    </div>
+    <div class="sidebar-footer">
+      <div>已登录：<span id="userLabel"></span></div>
+      <button class="logout-btn mt-8" id="logoutBtn">退出登录</button>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="topbar">
+      <a href="projects.html" class="btn btn-outline btn-sm">← 返回</a>
+      <span class="topbar-title" id="topbarTitle">项目详情</span>
+      <span class="topbar-user" id="projectName" style="color:#333;font-weight:600;"></span>
+    </div>
+    <div class="page">
+      <div id="flash"></div>
+
+      <!-- Tabs -->
+      <div id="tabsContainer">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="overview">概览</button>
+          <button class="tab-btn" data-tab="files">文件浏览</button>
+          <button class="tab-btn" data-tab="pipelines">流水线 / 步骤</button>
+          <button class="tab-btn" data-tab="jobs">任务历史</button>
+          <button class="tab-btn" data-tab="schedules">定时调度</button>
+        </div>
+
+        <!-- Tab: Overview -->
+        <div class="tab-panel active" data-tab="overview">
+          <div id="overviewContent"></div>
+        </div>
+
+        <!-- Tab: Files -->
+        <div class="tab-panel" data-tab="files">
+          <div class="card">
+            <div class="flex-center" style="gap:8px;flex-wrap:wrap;">
+              <select id="fileScopeSelect" class="form-control" style="width:160px;">
+                <option value="scripts">脚本目录</option>
+                <option value="alert">告警输出</option>
+                <option value="experiment">实验结果</option>
+                <option value="logs">日志目录</option>
+                <option value="plots">图表目录</option>
+                <option value="origin">原始数据</option>
+                <option value="project">项目根目录</option>
+              </select>
+              <input id="filePathInput" type="text" class="form-control" style="flex:1;min-width:180px;" placeholder="子路径（留空则浏览根）">
+              <button id="browseBtn" class="btn btn-outline">浏览</button>
+            </div>
+            <div id="fileList" class="file-tree mt-12"></div>
+          </div>
+          <!-- File content viewer -->
+          <div id="fileContentViewer" class="card hidden">
+            <div class="card-header" style="margin-bottom:8px;">
+              <span class="card-title" id="fileContentPath" style="font-family:monospace;font-size:.85rem;"></span>
+              <button id="closeFileContent" class="btn btn-outline btn-sm">关闭</button>
+            </div>
+            <pre class="code-viewer"></pre>
+          </div>
+        </div>
+
+        <!-- Tab: Pipelines -->
+        <div class="tab-panel" data-tab="pipelines">
+          <!-- Pipelines -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">流水线管理</span>
+              <button class="btn btn-primary btn-sm" id="newPipelineBtn">＋ 新建流水线</button>
+            </div>
+            <div id="pipelineList"></div>
+          </div>
+          <!-- Single steps -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">单步运行</span>
+            </div>
+            <div id="stepCards"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Jobs -->
+        <div class="tab-panel" data-tab="jobs">
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div class="card-header" style="padding:14px 20px;border-bottom:1px solid var(--border);">
+              <span class="card-title">任务历史</span>
+              <button class="btn btn-outline btn-sm" onclick="loadJobs()">↺ 刷新</button>
+            </div>
+            <div class="table-responsive">
+              <table class="styled">
+                <thead><tr>
+                  <th>ID</th><th>名称</th><th>状态</th><th>触发来源</th><th>创建时间</th><th>结束时间</th><th>操作</th>
+                </tr></thead>
+                <tbody id="jobsTbody"></tbody>
+              </table>
+            </div>
+            <div id="jobsPagination" class="pagination" style="padding:10px 16px;"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Schedules -->
+        <div class="tab-panel" data-tab="schedules">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">定时调度</span>
+              <button class="btn btn-primary btn-sm" id="newScheduleBtn">＋ 新建调度</button>
+            </div>
+            <div id="scheduleList"></div>
+          </div>
+        </div>
+      </div><!-- /tabsContainer -->
+    </div>
+  </div>
+</div>
+
+<!-- Pipeline Modal -->
+<div class="modal-overlay hidden" id="pipelineModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title">新建流水线</span>
+      <button class="modal-close" onclick="closeModal('pipelineModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="pipelineForm">
+        <div class="form-group">
+          <label class="form-label">流水线名称 <span class="required">*</span></label>
+          <input id="plName" type="text" class="form-control" placeholder="例：每日全量流水线">
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <input id="plDesc" type="text" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">选择步骤（按执行顺序勾选）<span class="required">*</span></label>
+          <div id="stepCheckList" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px 12px;"></div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="cancelPipelineBtn">取消</button>
+      <button class="btn btn-primary" id="savePipelineBtn">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Modal -->
+<div class="modal-overlay hidden" id="scheduleModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">新建调度</span>
+      <button class="modal-close" onclick="closeModal('scheduleModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">调度名称 <span class="required">*</span></label>
+        <input id="schName" type="text" class="form-control" placeholder="例：每日凌晨2点">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cron 表达式 <span class="required">*</span></label>
+        <input id="schCron" type="text" class="form-control" placeholder="例：0 2 * * *（每天 02:00）">
+        <span class="form-text">使用 Spring Cron（秒 分 时 日 月 周），或标准 5 段 Unix Cron。</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">目标（流水线 / 步骤）</label>
+        <select id="schTarget" class="form-control"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="cancelScheduleBtn">取消</button>
+      <button class="btn btn-primary" id="saveScheduleBtn">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log Modal -->
+<div class="modal-overlay hidden" id="logModal">
+  <div class="modal modal-xl">
+    <div class="modal-header">
+      <span class="modal-title" id="logModalTitle">任务日志</span>
+      <button class="modal-close" id="closeLogModal">✕</button>
+    </div>
+    <div class="modal-body" style="padding:12px;">
+      <pre id="logContent" class="code-viewer" style="max-height:550px;"></pre>
+    </div>
+  </div>
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/project.js"></script>
+</body>
+</html>
