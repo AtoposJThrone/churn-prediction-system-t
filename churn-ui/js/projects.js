@@ -15,6 +15,7 @@
     const saveBtn       = document.getElementById('saveProjectBtn');
     const testConnBtn   = document.getElementById('testConnBtn');
     const connResult    = document.getElementById('connResult');
+    const modalFlashEl  = document.getElementById('modalFlash');
     const deleteModal   = document.getElementById('deleteModal');
     const confirmDelBtn = document.getElementById('confirmDeleteBtn');
     const cancelDelBtn  = document.getElementById('cancelDeleteBtn');
@@ -63,16 +64,20 @@
     // ---- Modal: new / edit ----
     newBtn.addEventListener('click', () => openModalForm(null));
 
-    window.editProject = (id) => {
-        const p = projects.find(x => x.id === id);
-        if (!p) return;
-        openModalForm(p);
+    window.editProject = async (id) => {
+        try {
+            const p = await api.getProject(id);
+            openModalForm(p);
+        } catch (err) {
+            showFlash(flashEl, err.message, 'error');
+        }
     };
 
     function openModalForm(p) {
         editingId = p ? p.id : null;
         modalTitle.textContent = p ? '编辑项目' : '新建项目';
         connResult.textContent = '';
+        modalFlashEl.innerHTML = '';
         fillForm(p);
         openModal('projectModal');
     }
@@ -101,16 +106,37 @@
 
     // Test connection button
     testConnBtn.addEventListener('click', async () => {
-        if (!editingId) { connResult.textContent = '请先保存项目后再测试连接。'; return; }
+        if (!editingId) {
+            connResult.innerHTML = '<span style="color:#f59e0b">请先保存项目后再测试连接。</span>';
+            return;
+        }
         testConnBtn.disabled = true;
-        connResult.textContent = '测试中…';
+        connResult.innerHTML = '<span style="color:var(--muted)">测试中，最长等待 20 秒…</span>';
         try {
             const data = await api.testConnection(editingId);
-            const ssh = data.ssh?.success ? '✅ SSH 成功' : `❌ SSH: ${data.ssh?.error || '失败'}`;
-            const mysql = data.mysql ? (data.mysql.success ? '✅ MySQL 成功' : `❌ MySQL: ${data.mysql.error || '失败'}`) : '';
-            connResult.textContent = [ssh, mysql].filter(Boolean).join('   ');
+
+            // SSH result
+            const sshOk  = data.ssh?.ok;
+            const sshMsg = data.ssh?.message || (sshOk ? '连接成功' : '连接失败');
+            const sshMs  = data.ssh?.elapsedMs != null ? `（${data.ssh.elapsedMs} ms）` : '';
+            const sshLine = sshOk
+                ? `<span style="color:#22c55e">✅ SSH 连接成功 ${sshMs}</span>`
+                : `<span style="color:#ef4444">❌ SSH 连接失败 ${sshMs}：${escHtml(sshMsg)}</span>`;
+
+            // MySQL result
+            let mysqlLine = '';
+            if (data.mysql) {
+                const myOk  = data.mysql.ok;
+                const myMsg = data.mysql.message || (myOk ? '连接成功' : '连接失败');
+                const myMs  = data.mysql.elapsedMs != null ? `（${data.mysql.elapsedMs} ms）` : '';
+                mysqlLine = myOk
+                    ? `<span style="color:#22c55e">✅ MySQL 连接成功 ${myMs}</span>`
+                    : `<span style="color:#ef4444">❌ MySQL 连接失败 ${myMs}：${escHtml(myMsg)}</span>`;
+            }
+
+            connResult.innerHTML = [sshLine, mysqlLine].filter(Boolean).join('<br>');
         } catch (err) {
-            connResult.textContent = '❌ ' + err.message;
+            connResult.innerHTML = `<span style="color:#ef4444">❌ 请求出错：${escHtml(err.message)}</span>`;
         } finally {
             testConnBtn.disabled = false;
         }
@@ -119,20 +145,22 @@
     // Save
     saveBtn.addEventListener('click', async () => {
         const body = collectForm();
-        if (!body.name?.trim()) { showFlash(flashEl, '项目名称不能为空。', 'error'); return; }
+        if (!body.name?.trim()) { showFlash(modalFlashEl, '项目名称不能为空。', 'error'); return; }
+        if (!body.host?.trim()) { showFlash(modalFlashEl, '主机地址不能为空。', 'error'); return; }
         saveBtn.disabled = true;
         try {
             if (editingId) {
                 await api.updateProject(editingId, body);
+                closeModal('projectModal');
                 showFlash(flashEl, '项目已更新。', 'success');
             } else {
                 await api.createProject(body);
+                closeModal('projectModal');
                 showFlash(flashEl, '项目已创建。', 'success');
             }
-            closeModal('projectModal');
             loadProjects();
         } catch (err) {
-            showFlash(flashEl, err.message, 'error');
+            showFlash(modalFlashEl, err.message, 'error');
         } finally {
             saveBtn.disabled = false;
         }

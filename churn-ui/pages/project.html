@@ -50,46 +50,78 @@
         <div class="tab-panel" data-tab="files">
           <div class="card">
             <div class="flex-center" style="gap:8px;flex-wrap:wrap;">
-              <select id="fileScopeSelect" class="form-control" style="width:160px;">
+              <select id="fileScopeSelect" class="form-control" style="width:160px;" onchange="onScopeChange()">
                 <option value="scripts">脚本目录</option>
-                <option value="alert">告警输出</option>
-                <option value="experiment">实验结果</option>
+                <option value="alert_output">告警输出</option>
+                <option value="experiment_results">实验结果</option>
                 <option value="logs">日志目录</option>
                 <option value="plots">图表目录</option>
                 <option value="origin">原始数据</option>
+                <option value="transformed">转换数据</option>
                 <option value="project">项目根目录</option>
               </select>
-              <input id="filePathInput" type="text" class="form-control" style="flex:1;min-width:180px;" placeholder="子路径（留空则浏览根）">
-              <button id="browseBtn" class="btn btn-outline">浏览</button>
+              <span id="currentBrowsePath" style="font-size:.82rem;color:var(--muted);font-family:monospace;"></span>
             </div>
             <div id="fileList" class="file-tree mt-12"></div>
-          </div>
-          <!-- File content viewer -->
-          <div id="fileContentViewer" class="card hidden">
-            <div class="card-header" style="margin-bottom:8px;">
-              <span class="card-title" id="fileContentPath" style="font-family:monospace;font-size:.85rem;"></span>
-              <button id="closeFileContent" class="btn btn-outline btn-sm">关闭</button>
-            </div>
-            <pre class="code-viewer"></pre>
           </div>
         </div>
 
         <!-- Tab: Pipelines -->
         <div class="tab-panel" data-tab="pipelines">
-          <!-- Pipelines -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">流水线管理</span>
-              <button class="btn btn-primary btn-sm" id="newPipelineBtn">＋ 新建流水线</button>
-            </div>
-            <div id="pipelineList"></div>
+          <!-- Toolbar: pipeline selector + actions -->
+          <div class="wb-toolbar">
+            <select id="pipelineSelect" class="form-control" style="width:220px;" onchange="onPipelineSelect()">
+              <option value="">— 新建流水线 —</option>
+            </select>
+            <input id="plName2" type="text" class="form-control" style="flex:1;min-width:140px;" placeholder="流水线名称 *">
+            <input id="plDesc2" type="text" class="form-control" style="flex:2;min-width:160px;" placeholder="描述（可选）">
+            <button class="btn btn-primary btn-sm" id="savePipelineBtn2">💾 保存</button>
+            <button class="btn btn-primary btn-sm" id="runPipelineBtn2">▶ 运行</button>
+            <button class="btn btn-danger btn-sm"  id="delPipelineBtn2">🗑 删除</button>
           </div>
-          <!-- Single steps -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">单步运行</span>
+
+          <!-- Main workbench: left scripts + right components -->
+          <div class="wb-container">
+            <div class="wb-left">
+              <div class="wb-panel-hd">
+                📁 脚本文件
+                <button class="btn btn-outline btn-xs" id="refreshScriptsBtn" title="刷新">↺</button>
+              </div>
+              <div id="scriptFileList" class="wb-list"></div>
             </div>
-            <div id="stepCards"></div>
+            <div class="wb-right">
+              <div class="wb-panel-hd">
+                🔧 工作台
+                <span class="text-muted" style="font-size:.72rem;">点击左侧脚本可添加到此处，拖拽排序</span>
+              </div>
+              <div id="workbenchList" class="wb-list"></div>
+            </div>
+          </div>
+
+          <!-- Command config area -->
+          <div class="card wb-cmd-area">
+            <div class="card-header" style="margin-bottom:8px;">
+              <span class="card-title">⚙ 命令配置</span>
+              <span id="cmdConfigLabel" class="text-muted" style="font-size:.82rem;"></span>
+            </div>
+            <div id="cmdConfigBody">
+              <p class="wb-placeholder">请在工作台中选择一个组件来配置其启动命令</p>
+            </div>
+            <!-- Preset command creator -->
+            <div class="wb-preset-sep">
+              <p style="font-weight:600;font-size:.84rem;margin-bottom:8px;">📦 创建预设命令组件</p>
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+                <div class="form-group" style="flex:1;min-width:120px;margin:0;">
+                  <label class="form-label" style="font-size:.78rem;">预设名称</label>
+                  <input id="presetLabel" type="text" class="form-control" placeholder="如：HDFS 目录初始化">
+                </div>
+                <div class="form-group" style="flex:3;min-width:200px;margin:0;">
+                  <label class="form-label" style="font-size:.78rem;">命令内容</label>
+                  <input id="presetCmd" type="text" class="form-control code-input" placeholder="如：hdfs dfs -mkdir -p /data/churn" style="height:36px;padding:4px 10px;">
+                </div>
+                <button class="btn btn-outline btn-sm" id="addPresetBtn" style="flex-shrink:0;">+ 添加到工作台</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -127,52 +159,62 @@
   </div>
 </div>
 
-<!-- Pipeline Modal -->
-<div class="modal-overlay hidden" id="pipelineModal">
-  <div class="modal modal-lg">
-    <div class="modal-header">
-      <span class="modal-title">新建流水线</span>
-      <button class="modal-close" onclick="closeModal('pipelineModal')">✕</button>
-    </div>
-    <div class="modal-body">
-      <form id="pipelineForm">
-        <div class="form-group">
-          <label class="form-label">流水线名称 <span class="required">*</span></label>
-          <input id="plName" type="text" class="form-control" placeholder="例：每日全量流水线">
-        </div>
-        <div class="form-group">
-          <label class="form-label">描述</label>
-          <input id="plDesc" type="text" class="form-control">
-        </div>
-        <div class="form-group">
-          <label class="form-label">选择步骤（按执行顺序勾选）<span class="required">*</span></label>
-          <div id="stepCheckList" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px 12px;"></div>
-        </div>
-      </form>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" id="cancelPipelineBtn">取消</button>
-      <button class="btn btn-primary" id="savePipelineBtn">创建</button>
-    </div>
-  </div>
-</div>
+<!-- (Pipeline modal removed — workbench replaces it) -->
 
 <!-- Schedule Modal -->
 <div class="modal-overlay hidden" id="scheduleModal">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">新建调度</span>
+      <span class="modal-title">新建调度任务</span>
       <button class="modal-close" onclick="closeModal('scheduleModal')">✕</button>
     </div>
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label">调度名称 <span class="required">*</span></label>
-        <input id="schName" type="text" class="form-control" placeholder="例：每日凌晨2点">
+        <input id="schName" type="text" class="form-control" placeholder="例：每日凌晨2点全量流水线">
       </div>
       <div class="form-group">
-        <label class="form-label">Cron 表达式 <span class="required">*</span></label>
-        <input id="schCron" type="text" class="form-control" placeholder="例：0 2 * * *（每天 02:00）">
-        <span class="form-text">使用 Spring Cron（秒 分 时 日 月 周），或标准 5 段 Unix Cron。</span>
+        <label class="form-label">执行频率 <span class="required">*</span></label>
+        <select id="schFreq" class="form-control" onchange="onSchFreqChange()">
+          <option value="daily">每天（指定时刻）</option>
+          <option value="hourly">每小时（指定分钟）</option>
+          <option value="weekly">每周（指定星期几 + 时刻）</option>
+          <option value="monthly">每月（指定日期 + 时刻）</option>
+          <option value="interval">每隔 N 分钟</option>
+        </select>
+      </div>
+      <!-- daily / weekly / monthly -->
+      <div id="schTimeRow" class="form-row" style="display:flex;gap:12px;">
+        <div class="form-group" id="schWeekdayGroup" style="display:none;flex:1;">
+          <label class="form-label">星期几</label>
+          <select id="schWeekday" class="form-control">
+            <option value="1">周一</option><option value="2">周二</option><option value="3">周三</option>
+            <option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="0">周日</option>
+          </select>
+        </div>
+        <div class="form-group" id="schMonthdayGroup" style="display:none;flex:1;">
+          <label class="form-label">每月第几日</label>
+          <select id="schMonthday" class="form-control"></select>
+        </div>
+        <div class="form-group" id="schHourGroup" style="flex:1;">
+          <label class="form-label">小时（0–23）</label>
+          <select id="schHour" class="form-control"></select>
+        </div>
+        <div class="form-group" id="schMinGroup" style="flex:1;">
+          <label class="form-label">分钟（0–59）</label>
+          <select id="schMin" class="form-control"></select>
+        </div>
+      </div>
+      <!-- interval -->
+      <div class="form-group" id="schIntervalGroup" style="display:none;">
+        <label class="form-label">间隔（分钟）</label>
+        <input id="schIntervalMin" type="number" class="form-control" value="30" min="1" max="1440" placeholder="30">
+        <span class="form-text">最小 1 分钟，最大 1440 分钟（24 小时）</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">生成的 Cron 表达式</label>
+        <input id="schCronPreview" type="text" class="form-control" readonly
+               style="font-family:monospace;background:#1c2128;color:#58a6ff;">
       </div>
       <div class="form-group">
         <label class="form-label">目标（流水线 / 步骤）</label>
@@ -181,7 +223,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" id="cancelScheduleBtn">取消</button>
-      <button class="btn btn-primary" id="saveScheduleBtn">创建</button>
+      <button class="btn btn-primary" id="saveScheduleBtn">创建调度</button>
     </div>
   </div>
 </div>
@@ -195,6 +237,26 @@
     </div>
     <div class="modal-body" style="padding:12px;">
       <pre id="logContent" class="code-viewer" style="max-height:550px;"></pre>
+    </div>
+  </div>
+</div>
+
+<!-- File Preview Modal -->
+<div class="modal-overlay hidden" id="filePreviewModal">
+  <div class="modal" style="max-width:920px;">
+    <div class="modal-header">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:.72rem;color:var(--muted);内容">&#x1F4C4; 文件预览</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+          <span id="previewModalPath" style="font-family:monospace;font-size:.82rem;word-break:break-all;"></span>
+          <span id="previewModalExt" class="badge-ext"></span>
+        </div>
+      </div>
+      <button class="modal-close" id="closePreviewBtn">✕</button>
+    </div>
+    <div id="previewLineInfo" style="padding:4px 14px;font-size:.74rem;color:var(--muted);background:#f8f9fa;border-bottom:1px solid var(--border);"></div>
+    <div class="modal-body" style="padding:0;">
+      <pre id="previewContent" class="code-viewer" style="border-radius:0 0 10px 10px;max-height:72vh;margin:0;"></pre>
     </div>
   </div>
 </div>

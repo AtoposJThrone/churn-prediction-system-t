@@ -45,8 +45,20 @@ public class ExecutionController {
         String name = (String) body.get("name");
         String desc = (String) body.getOrDefault("description", "");
         @SuppressWarnings("unchecked")
-        List<String> stepKeys = (List<String>) body.get("stepKeys");
-        PipelineTemplate pt = executionService.createPipeline(projectId, name, desc, stepKeys);
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) body.get("steps");
+        PipelineTemplate pt = executionService.createPipeline(projectId, name, desc, steps);
+        return ApiResponse.ok(toPipelineView(pt));
+    }
+
+    @PutMapping("/api/projects/{projectId}/pipelines/{pipelineId}")
+    public ApiResponse<Map<String, Object>> updatePipeline(@PathVariable Long projectId,
+                                                            @PathVariable Long pipelineId,
+                                                            @RequestBody Map<String, Object> body) {
+        String name = (String) body.get("name");
+        String desc = (String) body.getOrDefault("description", "");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) body.get("steps");
+        PipelineTemplate pt = executionService.updatePipeline(projectId, pipelineId, name, desc, steps);
         return ApiResponse.ok(toPipelineView(pt));
     }
 

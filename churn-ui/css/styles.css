@@ -3,16 +3,16 @@
    ========================================================================== */
 
 :root {
-    --primary:      #3b6bb5;
-    --primary-dark: #2a4f8e;
-    --success:      #28a745;
-    --danger:       #dc3545;
-    --warning:      #fd7e14;
-    --bg:           #f0f2f5;
-    --card:         #ffffff;
-    --text:         #333333;
-    --muted:        #6c757d;
-    --border:       #dee2e6;
+    --primary:      #58a6ff;
+    --primary-dark: #1f6feb;
+    --success:      #3fb950;
+    --danger:       #f85149;
+    --warning:      #e3b341;
+    --bg:           #0d1117;
+    --card:         #161b22;
+    --text:         #e6edf3;
+    --muted:        #8b949e;
+    --border:       #30363d;
     --sidebar-w:    240px;
     --header-h:     56px;
 }
@@ -33,7 +33,7 @@ body {
 /* Sidebar */
 .sidebar {
     width: var(--sidebar-w);
-    background: #1e2a3a;
+    background: #010409;
     color: #c8cfd8;
     display: flex;
     flex-direction: column;
@@ -161,8 +161,8 @@ table.styled th, table.styled td {
     border-bottom: 1px solid var(--border);
     text-align: left;
 }
-table.styled th { background: #f8f9fa; font-weight: 600; white-space: nowrap; }
-table.styled tbody tr:hover { background: #f5f7fa; }
+table.styled th { background: #1c2128; font-weight: 600; white-space: nowrap; }
+table.styled tbody tr:hover { background: #1c2128; }
 
 /* ----- Badges ----- */
 .badge {
@@ -172,11 +172,11 @@ table.styled tbody tr:hover { background: #f5f7fa; }
     font-size: 0.75rem;
     font-weight: 600;
 }
-.badge-danger { background: #fde8e8; color: #c0392b; }
-.badge-warning { background: #fff3cd; color: #856404; }
-.badge-success { background: #d4edda; color: #155724; }
-.badge-info    { background: #d1ecf1; color: #0c5460; }
-.badge-secondary { background: #e2e3e5; color: #383d41; }
+.badge-danger { background: #3d1717; color: #ff7b72; }
+.badge-warning { background: #3d2a00; color: #e3b341; }
+.badge-success { background: #0f2d1c; color: #3fb950; }
+.badge-info    { background: #0c2533; color: #58c4dc; }
+.badge-secondary { background: #21262d; color: #8b949e; }
 
 /* ----- Buttons ----- */
 .btn {
@@ -193,8 +193,8 @@ table.styled tbody tr:hover { background: #f5f7fa; }
 }
 .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .btn-primary:hover { background: var(--primary-dark); }
-.btn-outline { background: #fff; color: var(--text); border-color: var(--border); }
-.btn-outline:hover { background: #f0f2f5; }
+.btn-outline { background: #21262d; color: var(--text); border-color: var(--border); }
+.btn-outline:hover { background: #30363d; }
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 .btn-danger:hover { background: #c82333; }
 .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
@@ -212,9 +212,10 @@ table.styled tbody tr:hover { background: #f5f7fa; }
     border-radius: 6px;
     font-size: 0.87rem;
     transition: border 0.15s;
-    background: #fff;
+    background: #0d1117;
+    color: var(--text);
 }
-.form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,107,181,0.15); }
+.form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(88,166,255,0.15); }
 .form-text { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
@@ -229,26 +230,31 @@ table.styled tbody tr:hover { background: #f5f7fa; }
 }
 .modal-overlay.hidden { display: none; }
 .modal {
-    background: #fff;
+    background: var(--card);
     border-radius: 10px;
     width: 100%;
     max-width: 640px;
     max-height: 90vh;
-    overflow-y: auto;
+    display: flex; flex-direction: column;
+    overflow: hidden;
     box-shadow: 0 8px 32px rgba(0,0,0,0.18);
 }
 .modal-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 22px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
 }
 .modal-title { font-size: 1rem; font-weight: 600; }
-.modal-body { padding: 20px 22px; }
+.modal-body { padding: 20px 22px; overflow-y: auto; flex: 1; }
 .modal-footer {
     padding: 14px 22px;
     border-top: 1px solid var(--border);
-    display: flex; justify-content: flex-end; gap: 8px;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+    flex-shrink: 0;
 }
+.footer-test-area { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+.footer-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .modal-close { background: none; border: none; cursor: pointer; font-size: 1.2rem; color: var(--muted); }
 .modal-close:hover { color: var(--text); }
 
@@ -263,10 +269,10 @@ table.styled tbody tr:hover { background: #f5f7fa; }
     font-size: 0.87rem;
     margin-bottom: 12px;
 }
-.alert-error { background: #fde8e8; color: #c0392b; border: 1px solid #f5c6c6; }
-.alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-.alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-.alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+.alert-error { background: #3d1717; color: #ff7b72; border: 1px solid #5c2020; }
+.alert-success { background: #0f2d1c; color: #3fb950; border: 1px solid #1a4028; }
+.alert-info { background: #0c2533; color: #58c4dc; border: 1px solid #123040; }
+.alert-warning { background: #3d2a00; color: #e3b341; border: 1px solid #5c3d00; }
 
 /* ----- Spinner ----- */
 .spinner {
@@ -288,9 +294,10 @@ table.styled tbody tr:hover { background: #f5f7fa; }
     border-radius: 4px;
     font-size: 0.82rem;
     cursor: pointer;
-    background: #fff;
+    background: var(--card);
+    color: var(--text);
 }
-.page-btn:hover:not(:disabled) { background: var(--bg); }
+.page-btn:hover:not(:disabled) { background: #21262d; }
 .page-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .page-info { font-size: 0.82rem; color: var(--muted); }
 
@@ -304,7 +311,7 @@ table.styled tbody tr:hover { background: #f5f7fa; }
     padding: 16px;
 }
 .login-card {
-    background: #fff;
+    background: var(--card);
     border-radius: 12px;
     padding: 40px 36px;
     width: 100%;
@@ -343,8 +350,12 @@ table.styled tbody tr:hover { background: #f5f7fa; }
     cursor: pointer;
     border-radius: 4px;
 }
-.file-entry:hover { background: #f0f2f5; }
-.file-entry .icon { width: 16px; text-align: center; }
+.file-entry:hover { background: #1c2128; }
+.file-entry .icon { width: 16px; text-align: center; flex-shrink: 0; }
+.file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { font-size: .75rem; color: var(--muted); flex-shrink: 0; }
+.btn-xs { padding: 2px 8px !important; font-size: .74rem !important; line-height: 1.4 !important; }
+.badge-ext { background: #0c2533; color: #58c4dc; border-radius: 4px; padding: 1px 6px; font-size: .72rem; font-family: monospace; flex-shrink: 0; }
 
 /* ----- Code viewer ----- */
 .code-viewer {
@@ -387,3 +398,51 @@ table.styled tbody tr:hover { background: #f5f7fa; }
 .ml-auto { margin-left: auto; }
 .w100 { width: 100%; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+
+/* ==========================================================================
+   Pipeline Workbench
+   ========================================================================== */
+.wb-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.wb-toolbar .form-control { background:var(--card); color:var(--text); border-color:var(--border); }
+
+.wb-container { display:flex; gap:12px; min-height:320px; }
+.wb-left  { flex:0 0 260px; border:1px solid var(--border); border-radius:8px; background:var(--card); display:flex; flex-direction:column; }
+.wb-right { flex:1;         border:1px solid var(--border); border-radius:8px; background:var(--card); display:flex; flex-direction:column; min-width:0; }
+
+.wb-panel-hd { padding:10px 14px; font-weight:600; font-size:.86rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.wb-panel-hd .text-muted { font-weight:400; }
+
+.wb-list { flex:1; overflow-y:auto; padding:4px; }
+
+/* Script item in left panel */
+.wb-script-item {
+    display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; cursor:pointer; font-size:.84rem; transition:background .15s;
+}
+.wb-script-item:hover { background:rgba(88,166,255,.08); }
+.wb-script-item .icon { flex-shrink:0; }
+.wb-script-item .fname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:monospace; }
+
+/* Workbench item in right panel */
+.wb-item {
+    display:flex; align-items:center; gap:8px; padding:8px 10px; margin:3px 0; border-radius:6px;
+    border:1px solid transparent; cursor:pointer; font-size:.84rem; transition:all .15s;
+}
+.wb-item:hover { background:rgba(88,166,255,.06); }
+.wb-item.selected { border-color:var(--primary); background:rgba(88,166,255,.1); }
+.wb-item .wb-seq { width:22px; height:22px; border-radius:50%; background:var(--primary-dark); color:#fff; font-size:.72rem; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.wb-item .wb-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wb-item .wb-type { flex-shrink:0; font-size:.7rem; }
+.wb-item .wb-actions { display:flex; gap:2px; flex-shrink:0; }
+.wb-item .wb-cmd-status { font-size:.68rem; flex-shrink:0; }
+.wb-cmd-ok  { color:var(--success); }
+.wb-cmd-miss { color:var(--danger); }
+
+/* Command config area */
+.wb-cmd-area { margin-top:12px; }
+.wb-cmd-area .code-input {
+    font-family:'Fira Code',Consolas,'Courier New',monospace; font-size:.82rem;
+    background:#1e2a3a; color:#c8cfd8; border-color:var(--border); resize:vertical;
+}
+.wb-cmd-area .form-label { font-size:.84rem; }
+.wb-preset-sep { border-top:1px solid var(--border); padding-top:12px; margin-top:14px; }
+.wb-placeholder { padding:32px 0; text-align:center; color:var(--muted); font-size:.85rem; }

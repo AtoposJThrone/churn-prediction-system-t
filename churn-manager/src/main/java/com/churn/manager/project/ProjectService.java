@@ -89,16 +89,26 @@ public class ProjectService {
     public Map<String, String> buildEnvMap(ManagedProject p, DecryptedSecrets s,
                                            Map<String, String> runtimeOverrides) {
         Map<String, String> env = new HashMap<>();
-        putIfNotNull(env, "TD_CHURN_PROJECT_DIR", p.getProjectRoot());
-        putIfNotNull(env, "TD_CHURN_SCRIPTS_DIR", p.getScriptsDir());
+        String root = p.getProjectRoot();
+        boolean hasRoot = root != null && !root.isBlank();
+
+        putIfNotNull(env, "TD_CHURN_PROJECT_DIR", root);
+        putIfNotNull(env, "TD_CHURN_SCRIPTS_DIR",
+                fallback(p.getScriptsDir(), hasRoot ? root + "/scripts" : null));
         putIfNotNull(env, "TD_CHURN_ORIGIN_DIR", p.getOriginDataDir());
         putIfNotNull(env, "TD_CHURN_TRANSFORMED_DIR", p.getTransformedDataDir());
-        putIfNotNull(env, "TD_CHURN_ETL_OUTPUT_DIR", p.getProjectRoot() == null ? null : p.getProjectRoot() + "/etl_output_v2");
-        putIfNotNull(env, "TD_CHURN_MODEL_DIR", p.getProjectRoot() == null ? null : p.getProjectRoot() + "/models");
-        putIfNotNull(env, "TD_CHURN_ALERT_OUTPUT_DIR", p.getAlertOutputDir());
-        putIfNotNull(env, "TD_CHURN_EXPERIMENT_DIR", p.getExperimentResultsDir());
-        putIfNotNull(env, "TD_CHURN_PLOT_DIR", p.getPlotsDir());
-        putIfNotNull(env, "TD_CHURN_LOGS_DIR", p.getLogsDir());
+        putIfNotNull(env, "TD_CHURN_ETL_OUTPUT_DIR",
+                fallback(null, hasRoot ? root + "/etl_output_v2" : null));
+        putIfNotNull(env, "TD_CHURN_MODEL_DIR",
+                fallback(null, hasRoot ? root + "/models" : null));
+        putIfNotNull(env, "TD_CHURN_ALERT_OUTPUT_DIR",
+                fallback(p.getAlertOutputDir(), hasRoot ? root + "/alert_output" : null));
+        putIfNotNull(env, "TD_CHURN_EXPERIMENT_DIR",
+                fallback(p.getExperimentResultsDir(), hasRoot ? root + "/experiment_results" : null));
+        putIfNotNull(env, "TD_CHURN_PLOT_DIR",
+                fallback(p.getPlotsDir(), hasRoot ? root + "/plots" : null));
+        putIfNotNull(env, "TD_CHURN_LOGS_DIR",
+                fallback(p.getLogsDir(), hasRoot ? root + "/logs" : null));
         putIfNotNull(env, "TD_CHURN_HDFS_LANDING_DIR", p.getHdfsLandingDir());
         putIfNotNull(env, "TD_CHURN_HIVE_DB", p.getHiveDb());
         // Database credentials
@@ -112,11 +122,18 @@ public class ProjectService {
 
     // --- private helpers ---
 
+    /** Return the first non-blank value, or null. */
+    private static String fallback(String primary, String secondary) {
+        if (primary != null && !primary.isBlank()) return primary;
+        return secondary;
+    }
+
     private void applyRequest(ManagedProject p, ProjectRequest req) {
         if (req.name() != null && !req.name().isBlank()) p.setName(req.name().trim());
         if (req.description() != null) p.setDescription(req.description());
         if (req.host() != null && !req.host().isBlank()) p.setHost(req.host().trim());
         if (req.sshPort() != null) p.setSshPort(req.sshPort());
+        
         if (req.projectRoot() != null) p.setProjectRoot(req.projectRoot());
         if (req.scriptsDir() != null) p.setScriptsDir(req.scriptsDir());
         if (req.alertOutputDir() != null) p.setAlertOutputDir(req.alertOutputDir());
@@ -125,6 +142,7 @@ public class ProjectService {
         if (req.logsDir() != null) p.setLogsDir(req.logsDir());
         if (req.originDataDir() != null) p.setOriginDataDir(req.originDataDir());
         if (req.transformedDataDir() != null) p.setTransformedDataDir(req.transformedDataDir());
+        
         if (req.hiveDb() != null) p.setHiveDb(req.hiveDb());
         if (req.hdfsLandingDir() != null) p.setHdfsLandingDir(req.hdfsLandingDir());
         if (req.pythonCommand() != null) p.setPythonCommand(req.pythonCommand());

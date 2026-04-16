@@ -61,12 +61,13 @@ const api = {
     deleteProject:     (id)          => apiFetch('DELETE', `/api/projects/${id}`),
     testConnection:    (id)          => apiFetch('POST',   `/api/projects/${id}/test-connection`),
     listFiles:         (id, scope, path) => apiFetch('GET',`/api/projects/${id}/files?scope=${encodeURIComponent(scope||'')}&path=${encodeURIComponent(path||'')}`),
-    getFileContent:    (id, path)    => apiFetch('GET',    `/api/projects/${id}/file-content?path=${encodeURIComponent(path)}`),
+    getFileContent:    (id, path, maxLines=500) => apiFetch('GET',    `/api/projects/${id}/file-content?path=${encodeURIComponent(path)}&maxLines=${maxLines}`),
 
     // Steps / Pipelines / Jobs
     listSteps:         ()            => apiFetch('GET',    '/api/steps'),
     listPipelines:     (pid)         => apiFetch('GET',    `/api/projects/${pid}/pipelines`),
     createPipeline:    (pid, body)   => apiFetch('POST',   `/api/projects/${pid}/pipelines`, body),
+    updatePipeline:    (pid, lid, body) => apiFetch('PUT', `/api/projects/${pid}/pipelines/${lid}`, body),
     deletePipeline:    (pid, lid)    => apiFetch('DELETE', `/api/projects/${pid}/pipelines/${lid}`),
     runStep:           (pid, key, overrides) => apiFetch('POST', `/api/projects/${pid}/steps/${key}/run`, { overrides }),
     runPipeline:       (pid, lid, overrides) => apiFetch('POST', `/api/projects/${pid}/pipelines/${lid}/run`, { overrides }),
@@ -79,6 +80,7 @@ const api = {
     createSchedule:    (pid, body)   => apiFetch('POST',   `/api/projects/${pid}/schedules`, body),
     updateSchedule:    (pid, id, b)  => apiFetch('PUT',    `/api/projects/${pid}/schedules/${id}`, b),
     toggleSchedule:    (pid, id)     => apiFetch('POST',   `/api/projects/${pid}/schedules/${id}/toggle`),
+    runScheduleNow:    (pid, id)     => apiFetch('POST',   `/api/projects/${pid}/schedules/${id}/run-now`),
     deleteSchedule:    (pid, id)     => apiFetch('DELETE', `/api/projects/${pid}/schedules/${id}`),
 
     // Dashboard
@@ -94,8 +96,10 @@ function requireAuth() {
 /** Render a flash message inside a container element */
 function showFlash(el, msg, type = 'error') {
     if (!el) return;
-    el.innerHTML = `<div class="alert-banner alert-${type === 'error' ? 'error' : type === 'success' ? 'success' : 'info'}">${escHtml(msg)}</div>`;
-    if (type !== 'error') setTimeout(() => { if (el) el.innerHTML = ''; }, 3500);
+    const cls = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info';
+    el.innerHTML = `<div class="alert-banner alert-${cls}">${escHtml(msg)}</div>`;
+    const delay = type === 'error' ? 6000 : 3500;
+    setTimeout(() => { if (el) el.innerHTML = ''; }, delay);
 }
 
 /** Escape HTML */
@@ -126,14 +130,14 @@ function riskBadge(level) {
     return `<span class="badge badge-${cls}">${escHtml(label)}</span>`;
 }
 
-/** Job status badge */
+/** Job status badge — 3 display states: running / ended / aborted */
 function jobStatusBadge(status) {
     const map = {
-        PENDING:   ['secondary', '待运行'],
+        PENDING:   ['info',      '运行中'],
         RUNNING:   ['info',      '运行中'],
-        SUCCESS:   ['success',   '成功'],
-        FAILED:    ['danger',    '失败'],
-        CANCELLED: ['secondary', '已取消'],
+        SUCCESS:   ['success',   '已结束'],
+        FAILED:    ['danger',    '已中止'],
+        CANCELLED: ['danger',    '已中止'],
     };
     const [cls, label] = map[status] || ['secondary', status || '—'];
     return `<span class="badge badge-${cls}">${label}</span>`;

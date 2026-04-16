@@ -50,19 +50,30 @@ public class ExecutionService {
     }
 
     @Transactional
-    public PipelineTemplate createPipeline(Long projectId, String name, String description, List<String> stepKeys) {
+    public PipelineTemplate createPipeline(Long projectId, String name, String description,
+                                           List<Map<String, Object>> steps) {
         projectService.getOrThrow(projectId);
-        if (stepKeys == null || stepKeys.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "至少选择一个步骤。");
-        }
-        // Validate all keys exist
-        stepKeys.forEach(k -> stepCatalog.getOrThrow(k));
-
+        validateSteps(steps);
         PipelineTemplate pt = new PipelineTemplate();
         pt.setProjectId(projectId);
         pt.setName(name);
         pt.setDescription(description);
-        pt.setStepKeysJson(toJson(stepKeys));
+        pt.setStepKeysJson(toJson(steps));
+        return pipelineRepo.save(pt);
+    }
+
+    @Transactional
+    public PipelineTemplate updatePipeline(Long projectId, Long pipelineId, String name,
+                                           String description, List<Map<String, Object>> steps) {
+        PipelineTemplate pt = pipelineRepo.findById(pipelineId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "流水线不存在。"));
+        if (!pt.getProjectId().equals(projectId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "流水线不属于该项目。");
+        }
+        validateSteps(steps);
+        if (name != null && !name.isBlank()) pt.setName(name);
+        if (description != null) pt.setDescription(description);
+        pt.setStepKeysJson(toJson(steps));
         return pipelineRepo.save(pt);
     }
 
@@ -126,15 +137,23 @@ public class ExecutionService {
         DecryptedSecrets s = projectService.decryptSecrets(projectId);
         Map<String, String> env = projectService.buildEnvMap(p, s, overrides);
 
-        List<String> stepKeys = fromJson(pt.getStepKeysJson());
+        List<Map<String, Object>> steps = parseSteps(pt.getStepKeysJson());
         String jobId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String jobDir = resolveLogsDir(p) + "/" + appProperties.getJobs().getLogSubdir() + "/" + jobId;
 
         StringBuilder runScript = new StringBuilder("set -e\n");
-        for (String key : stepKeys) {
-            StepCatalog.StepDef step = stepCatalog.getOrThrow(key);
-            runScript.append("echo '[STEP ").append(key).append("] ").append(step.displayName()).append("'\n");
-            runScript.append(buildCommand(p, step)).append("\n");
+        int seq = 1;
+        for (Map<String, Object> step : steps) {
+            String label = String.valueOf(step.getOrDefault("label", "Step " + seq));
+            String startCmd = String.valueOf(step.getOrDefault("startCmd", ""));
+            String postCmd  = String.valueOf(step.getOrDefault("postCmd", ""));
+            runScript.append("echo '[STEP ").append(seq).append("] ").append(label).append("'\n");
+            if (!startCmd.isBlank()) runScript.append(startCmd).append("\n");
+            if (postCmd != null && !postCmd.isBlank()) {
+                runScript.append("echo '[POST ").append(seq).append("] ").append(label).append("'\n");
+                runScript.append(postCmd).append("\n");
+            }
+            seq++;
         }
         String envContent = buildEnvScript(env);
         String runContent = buildRunScript(pt.getName(), runScript.toString());
@@ -230,15 +249,27 @@ public class ExecutionService {
     }
 
     private String buildCommand(ManagedProject p, StepCatalog.StepDef step) {
-        String scripts = p.getScriptsDir() != null ? p.getScriptsDir() : "$TD_CHURN_PROJECT_DIR/scripts";
-        String script = scripts + "/" + step.scriptFile();
-        if ("spark".equals(step.executor())) {
-            String sparkCmd = p.getSparkSubmitCommand() != null
-                    ? p.getSparkSubmitCommand()
-                    : "spark-submit --master yarn --deploy-mode client";
-            return sparkCmd + " " + script;
+        // Resolve scripts directory: explicit > projectRoot/scripts > fail with helpful message
+        String scripts;
+        if (p.getScriptsDir() != null && !p.getScriptsDir().isBlank()) {
+            scripts = p.getScriptsDir().stripTrailing();
+        } else if (p.getProjectRoot() != null && !p.getProjectRoot().isBlank()) {
+            scripts = p.getProjectRoot().stripTrailing() + "/scripts";
         } else {
-            String pythonCmd = p.getPythonCommand() != null ? p.getPythonCommand() : "python3";
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "请先在项目设置中配置「脚本目录」或「项目根目录」，否则无法定位脚本文件。");
+        }
+        String script = scripts + "/" + step.scriptFile();
+
+        if ("spark".equals(step.executor())) {
+            if (p.getSparkSubmitCommand() == null || p.getSparkSubmitCommand().isBlank()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "Spark 类步骤需要配置「spark-submit 命令路径」（如 /opt/spark/bin/spark-submit --master yarn --deploy-mode client），请在项目设置中填写。");
+            }
+            return p.getSparkSubmitCommand().strip() + " " + script;
+        } else {
+            String pythonCmd = (p.getPythonCommand() != null && !p.getPythonCommand().isBlank())
+                    ? p.getPythonCommand().strip() : "python3";
             return pythonCmd + " " + script;
         }
     }
@@ -253,15 +284,15 @@ public class ExecutionService {
     }
 
     private String buildRunScript(String jobName, String commands) {
+        // Use trap to reliably write exit code even when set -e triggers early exit
         return "#!/usr/bin/env bash\n"
                 + "set -e\n"
-                + ". \"$(dirname \"$0\")/env.sh\"\n"
+                + "_jd=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\n"
+                + "trap 'echo $? > \"${_jd}/job.exit\"' EXIT\n"
+                + ". \"${_jd}/env.sh\"\n"
                 + "echo '[START] " + jobName + " @ $(date)'\n"
                 + commands + "\n"
-                + "EXIT_CODE=$?\n"
-                + "echo \"$EXIT_CODE\" > \"$(dirname \"$0\")/job.exit\"\n"
-                + "echo '[END] exit=$EXIT_CODE @ $(date)'\n"
-                + "exit $EXIT_CODE\n";
+                + "echo '[END] " + jobName + " @ $(date)'\n";
     }
 
     private String resolveLogsDir(ManagedProject p) {
@@ -275,18 +306,50 @@ public class ExecutionService {
         return "'" + v.replace("'", "'\\''") + "'";
     }
 
+    private void validateSteps(List<Map<String, Object>> steps) {
+        if (steps == null || steps.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "流水线至少需要一个组件。");
+        }
+        for (Map<String, Object> step : steps) {
+            Object cmd = step.get("startCmd");
+            if (cmd == null || cmd.toString().isBlank()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "组件「" + step.getOrDefault("label", "?") + "」缺少启动命令。");
+            }
+        }
+    }
+
     @SuppressWarnings("unchecked")
-    private List<String> fromJson(String json) {
+    private List<Map<String, Object>> parseSteps(String json) {
         try {
-            return objectMapper.readValue(json, List.class);
+            List<?> list = objectMapper.readValue(json, List.class);
+            if (list.isEmpty()) return List.of();
+            if (list.get(0) instanceof String) {
+                // Old format: ["s11","s20"] → convert via StepCatalog for backward compat
+                return list.stream().map(key -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    try {
+                        StepCatalog.StepDef def = stepCatalog.getOrThrow((String) key);
+                        m.put("uid", key); m.put("type", "script");
+                        m.put("label", def.displayName());
+                        m.put("scriptFile", def.scriptFile());
+                        m.put("startCmd", ""); m.put("postCmd", "");
+                    } catch (Exception e) {
+                        m.put("uid", key); m.put("type", "script");
+                        m.put("label", key); m.put("startCmd", ""); m.put("postCmd", "");
+                    }
+                    return m;
+                }).toList();
+            }
+            return (List<Map<String, Object>>) (List<?>) list;
         } catch (Exception e) {
             return List.of();
         }
     }
 
-    private String toJson(List<String> list) {
+    private String toJson(Object obj) {
         try {
-            return objectMapper.writeValueAsString(list);
+            return objectMapper.writeValueAsString(obj);
         } catch (Exception e) {
             return "[]";
         }

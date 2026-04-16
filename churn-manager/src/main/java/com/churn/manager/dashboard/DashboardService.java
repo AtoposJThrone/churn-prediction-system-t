@@ -47,7 +47,7 @@ public class DashboardService {
             } catch (ApiException e) {
                 throw e;
             } catch (Exception e) {
-                log.warn("Remote dashboard load failed for project {}: {}", projectId, e.getMessage());
+                log.warn("Remote dashboard load failed for project {} (will try MySQL/fallback): {}", projectId, e.getMessage());
             }
             // Tier 2: MySQL
             try {
@@ -57,7 +57,7 @@ public class DashboardService {
                     return loadFromMysql(s);
                 }
             } catch (Exception e) {
-                log.warn("MySQL dashboard load failed for project {}: {}", projectId, e.getMessage());
+                log.warn("MySQL dashboard load failed for project {} (will use fallback): {}", projectId, e.getMessage());
             }
         }
         // Tier 3: fallback
@@ -86,7 +86,8 @@ public class DashboardService {
                 p.getHost(), p.getSshPort(), s.sshUsername(), s.sshPassword(), s.sshPrivateKey(),
                 expDir + "/feat_imp_randomforest.csv");
 
-        if (summaryContent == null || alertContent == null) throw new RuntimeException("远程文件为空");
+        if (summaryContent == null || alertContent == null) throw new RuntimeException(
+                "远程 CSV 文件为空或不存在（" + alertDir + "/daily_summary.csv 或 alert_result.csv），请先执行规则引擎步骤生成输出文件");
 
         return buildFromCsvStrings(summaryContent, alertContent, modelContent, featContent, "remote");
     }
@@ -101,8 +102,9 @@ public class DashboardService {
 
             DashboardData.DailySummary summary = queryDailySummary(conn);
             List<Map<String, Object>> riskTrend = queryRiskTrend(conn);
-            List<Map<String, Object>> modelComparison = queryModelComparison(conn);
-            List<Map<String, Object>> featureImportance = queryFeatureImportance(conn);
+            // ads_model_comparison / ads_feature_importance 仅存于 Hive，MySQL ADS 层无这两张表
+            List<Map<String, Object>> modelComparison = List.of();
+            List<Map<String, Object>> featureImportance = List.of();
             List<Map<String, Object>> recentAlerts = queryRecentAlerts(conn);
 
             List<Map<String, Object>> riskDistribution = List.of(
@@ -120,7 +122,7 @@ public class DashboardService {
     private DashboardData.DailySummary queryDailySummary(Connection conn) throws Exception {
         String sql = "SELECT stat_date, total_active_users, high_risk_count, medium_risk_count, " +
                 "low_risk_count, high_risk_rate, avg_churn_prob, top_stuck_map_id, d1_no_tutorial_count " +
-                "FROM ads_daily_summary ORDER BY stat_date DESC LIMIT 1";
+                "FROM ads_daily_churn_summary ORDER BY stat_date DESC LIMIT 1";
         try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             if (rs.next()) {
                 return new DashboardData.DailySummary(
@@ -131,29 +133,19 @@ public class DashboardService {
                         rs.getLong("d1_no_tutorial_count"));
             }
         }
-        throw new RuntimeException("ads_daily_summary 无数据");
+        throw new RuntimeException("ads_daily_churn_summary 无数据");
     }
 
     private List<Map<String, Object>> queryRiskTrend(Connection conn) throws Exception {
         String sql = "SELECT stat_date, high_risk_count, medium_risk_count, low_risk_count " +
-                "FROM ads_daily_summary ORDER BY stat_date DESC LIMIT 30";
-        return queryToList(conn, sql);
-    }
-
-    private List<Map<String, Object>> queryModelComparison(Connection conn) throws Exception {
-        String sql = "SELECT model, window_type AS `window`, auc, f1 FROM ads_model_comparison";
-        return queryToList(conn, sql);
-    }
-
-    private List<Map<String, Object>> queryFeatureImportance(Connection conn) throws Exception {
-        String sql = "SELECT feature, importance FROM ads_feature_importance " +
-                "ORDER BY importance DESC LIMIT 15";
+                "FROM ads_daily_churn_summary ORDER BY stat_date DESC LIMIT 30";
         return queryToList(conn, sql);
     }
 
     private List<Map<String, Object>> queryRecentAlerts(Connection conn) throws Exception {
+        // MySQL ADS 层实际表名为 ads_user_churn_risk（由 40_rule_engine_v4.py 写入）
         String sql = "SELECT user_id, churn_prob, risk_level, top_reason_1 AS topReason " +
-                "FROM ads_alert_result WHERE final_alert = 1 ORDER BY churn_prob DESC LIMIT 50";
+                "FROM ads_user_churn_risk WHERE final_alert = 1 ORDER BY churn_prob DESC LIMIT 50";
         return queryToList(conn, sql);
     }
 
@@ -195,6 +187,11 @@ public class DashboardService {
     private DashboardData buildFromCsvStrings(String summaryStr, String alertStr,
                                                String modelStr, String featStr,
                                                String source) throws Exception {
+        // Strip UTF-8 BOM (\uFEFF) that Windows-generated CSV files may carry
+        summaryStr = stripBom(summaryStr);
+        alertStr   = stripBom(alertStr);
+        modelStr   = stripBom(modelStr);
+        featStr    = stripBom(featStr);
         DashboardData.DailySummary summary = parseDailySummary(summaryStr);
         List<Map<String, Object>> recentAlerts = parseAlerts(alertStr);
         List<Map<String, Object>> modelComparison = modelStr != null ? parseModelComparison(modelStr) : List.of();
@@ -206,13 +203,8 @@ public class DashboardService {
                 Map.of("name", "低风险", "value", summary.lowRiskCount())
         );
 
-        // Build a single-row trend from the summary (no history in fallback)
-        List<Map<String, Object>> riskTrend = List.of(Map.of(
-                "date", summary.statDate(),
-                "highRisk", summary.highRiskCount(),
-                "mediumRisk", summary.mediumRiskCount(),
-                "lowRisk", summary.lowRiskCount()
-        ));
+        // Build multi-row trend from all rows in daily_summary CSV
+        List<Map<String, Object>> riskTrend = parseRiskTrend(summaryStr);
 
         return new DashboardData(summary, riskTrend, riskDistribution,
                 modelComparison, featureImportance, recentAlerts,
@@ -235,6 +227,23 @@ public class DashboardService {
             }
         }
         throw new RuntimeException("daily_summary.csv 无数据行");
+    }
+
+    private List<Map<String, Object>> parseRiskTrend(String csv) throws Exception {
+        List<Map<String, Object>> list = new ArrayList<>();
+        try (CSVParser parser = CSVParser.parse(csv, CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build())) {
+            for (CSVRecord r : parser) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("date", r.get("stat_date"));
+                m.put("highRisk", parseLong(r.get("high_risk_count")));
+                m.put("mediumRisk", parseLong(r.get("medium_risk_count")));
+                m.put("lowRisk", parseLong(r.get("low_risk_count")));
+                list.add(m);
+            }
+        }
+        // CSV is newest-first; reverse to chronological order for trend display
+        Collections.reverse(list);
+        return list;
     }
 
     private List<Map<String, Object>> parseAlerts(String csv) throws Exception {
@@ -301,5 +310,10 @@ public class DashboardService {
 
     private static long parseLong(String s) {
         try { return Long.parseLong(s.trim()); } catch (Exception e) { return 0L; }
+    }
+
+    /** Strip UTF-8 BOM (U+FEFF) that Excel/Windows-generated CSV files may carry. */
+    private static String stripBom(String s) {
+        return (s != null && s.startsWith("\uFEFF")) ? s.substring(1) : s;
     }
 }

@@ -27,7 +27,7 @@
       <span class="topbar-title">数据仪表盘</span>
       <div class="flex-center" style="gap:8px;">
         <select id="projectSelect" class="form-control" style="width:220px;padding:5px 8px;font-size:.85rem;">
-          <option value="">使用内置演示数据</option>
+          <option value="">😛只有我知道……</option>
         </select>
         <button id="loadBtn" class="btn btn-primary btn-sm">加载 / 刷新</button>
       </div>
@@ -99,7 +99,7 @@
       <!-- Feature importance full width -->
       <div class="charts-grid">
         <div class="chart-box full">
-          <div class="chart-title">特征重要性（随机森林 Top 12）</div>
+          <div class="chart-title">特征重要性（随机森林 Top 10）</div>
           <div class="chart-area" style="height:320px;" id="featChart"></div>
         </div>
       </div>
@@ -108,11 +108,35 @@
       <div class="card" style="padding:0;overflow:hidden;">
         <div class="card-header" style="padding:14px 20px;border-bottom:1px solid var(--border);">
           <span class="card-title">近期告警用户（Top 50）</span>
+          <span id="alertCount" class="text-muted" style="font-size:.8rem;"></span>
+        </div>
+        <!-- Filters -->
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+          <label style="font-size:.82rem;color:var(--muted);white-space:nowrap;">风险等级</label>
+          <select id="filterRisk" class="form-control" style="width:100px;font-size:.82rem;padding:4px 6px;">
+            <option value="">全部</option>
+            <option value="high">高风险</option>
+            <option value="medium">中风险</option>
+            <option value="low">低风险</option>
+          </select>
+          <label style="font-size:.82rem;color:var(--muted);white-space:nowrap;">告警状态</label>
+          <select id="filterFinalAlert" class="form-control" style="width:100px;font-size:.82rem;padding:4px 6px;">
+            <option value="">全部</option>
+            <option value="1">已触发</option>
+            <option value="0">未触发</option>
+          </select>
+          <label style="font-size:.82rem;color:var(--muted);white-space:nowrap;">主要原因</label>
+          <input id="filterReason" type="text" class="form-control" style="width:200px;font-size:.82rem;padding:4px 6px;" placeholder="关键词搜索...">
+          <button id="clearFiltersBtn" class="btn btn-outline btn-sm">清除筛选</button>
         </div>
         <div class="table-responsive">
           <table class="styled">
             <thead><tr>
-              <th>用户 ID</th><th>流失概率</th><th>风险等级</th><th>告警状态</th><th>主要原因</th>
+              <th>用户 ID</th>
+              <th onclick="sortAlert('churnProb')" style="cursor:pointer;user-select:none;">流失概率<span id="sort_churnProb"> ↕</span></th>
+              <th onclick="sortAlert('riskLevel')" style="cursor:pointer;user-select:none;">风险等级<span id="sort_riskLevel"> ↕</span></th>
+              <th onclick="sortAlert('finalAlert')" style="cursor:pointer;user-select:none;">告警状态<span id="sort_finalAlert"> ↕</span></th>
+              <th onclick="sortAlert('topReason')" style="cursor:pointer;user-select:none;">主要原因<span id="sort_topReason"> ↕</span></th>
             </tr></thead>
             <tbody id="alertTbody"></tbody>
           </table>

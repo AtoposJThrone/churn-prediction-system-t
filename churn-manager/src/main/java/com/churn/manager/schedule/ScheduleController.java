@@ -47,6 +47,12 @@ public class ScheduleController {
         return ApiResponse.ok(scheduleService.toggle(id));
     }
 
+    @PostMapping("/{id}/run-now")
+    public ApiResponse<com.churn.manager.execution.JobRecord> runNow(
+            @PathVariable Long projectId, @PathVariable Long id) {
+        return ApiResponse.ok(scheduleService.runNow(id));
+    }
+
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long projectId, @PathVariable Long id) {
         scheduleService.delete(id);

@@ -2,6 +2,7 @@ package com.churn.manager.schedule;
 
 import com.churn.manager.common.ApiException;
 import com.churn.manager.execution.ExecutionService;
+import com.churn.manager.execution.JobRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -103,6 +104,18 @@ public class ScheduleService {
         scheduleRepo.delete(s);
     }
 
+    @Transactional
+    public JobRecord runNow(Long id) {
+        JobSchedule s = getOrThrow(id);
+        String source = "manual-trigger:" + id;
+        if (s.getPipelineId() != null) {
+            return executionService.runPipeline(s.getProjectId(), s.getPipelineId(), Map.of(), source);
+        } else if (s.getStepKey() != null) {
+            return executionService.runStep(s.getProjectId(), s.getStepKey(), Map.of(), source);
+        }
+        throw new ApiException(HttpStatus.BAD_REQUEST, "该调度未配置运行目标（流水线或步骤）。");
+    }
+
     // --- private ---
 
     private void register(JobSchedule s) {
@@ -122,6 +135,7 @@ public class ScheduleService {
         if (f != null) f.cancel(false);
     }
 
+    @org.springframework.transaction.annotation.Transactional
     private void trigger(Long scheduleId) {
         scheduleRepo.findById(scheduleId).ifPresent(s -> {
             try {

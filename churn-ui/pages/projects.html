@@ -60,6 +60,7 @@
       <button class="modal-close" onclick="closeModal('projectModal')">✕</button>
     </div>
     <div class="modal-body">
+      <div id="modalFlash"></div>
       <form id="projectForm" autocomplete="off">
         <!-- 基本信息 -->
         <p class="nav-section-title" style="padding:0;margin-bottom:10px;color:#888;">基本信息</p>
@@ -78,8 +79,8 @@
         <p class="nav-section-title" style="padding:0;margin-bottom:10px;margin-top:8px;color:#888;">SSH 连接</p>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">主机地址</label>
-            <input name="host" type="text" class="form-control" placeholder="192.168.1.100">
+            <label class="form-label">主机地址 <span class="required">*</span></label>
+            <input name="host" type="text" class="form-control" placeholder="192.168.1.100 或域名">
           </div>
           <div class="form-group">
             <label class="form-label">SSH 端口</label>
@@ -89,7 +90,7 @@
         <div class="form-row-3">
           <div class="form-group">
             <label class="form-label">SSH 用户名</label>
-            <input name="sshUsername" type="text" class="form-control">
+            <input name="sshUsername" type="text" class="form-control" placeholder="例：hadoop">
           </div>
           <div class="form-group">
             <label class="form-label">SSH 密码 <span class="text-muted">(留空不修改)</span></label>
@@ -101,10 +102,7 @@
           </div>
         </div>
         <!-- Test connection -->
-        <div class="flex-center mt-8">
-          <button type="button" class="btn btn-outline btn-sm" id="testConnBtn">⚡ 测试连接</button>
-          <span id="connResult" style="font-size:.83rem;"></span>
-        </div>
+        <div style="height:8px;"></div>
 
         <!-- 目录配置 -->
         <p class="nav-section-title" style="padding:0;margin-bottom:10px;margin-top:14px;color:#888;">项目目录</p>
@@ -121,31 +119,31 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">告警输出目录</label>
-            <input name="alertOutputDir" type="text" class="form-control">
+            <input name="alertOutputDir" type="text" class="form-control" placeholder="例：/data/churn-project/alert_output">
           </div>
           <div class="form-group">
             <label class="form-label">实验结果目录</label>
-            <input name="experimentResultsDir" type="text" class="form-control">
+            <input name="experimentResultsDir" type="text" class="form-control" placeholder="例：/data/churn-project/experiment_results">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">日志目录</label>
-            <input name="logsDir" type="text" class="form-control">
+            <input name="logsDir" type="text" class="form-control" placeholder="例：/data/churn-project/logs">
           </div>
           <div class="form-group">
             <label class="form-label">图表目录</label>
-            <input name="plotsDir" type="text" class="form-control">
+            <input name="plotsDir" type="text" class="form-control" placeholder="例：/data/churn-project/plots">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">原始数据目录</label>
-            <input name="originDataDir" type="text" class="form-control">
+            <input name="originDataDir" type="text" class="form-control" placeholder="例：/data/churn-project/origin_data">
           </div>
           <div class="form-group">
             <label class="form-label">转换数据目录</label>
-            <input name="transformedDataDir" type="text" class="form-control">
+            <input name="transformedDataDir" type="text" class="form-control" placeholder="例：/data/churn-project/transformed_data">
           </div>
         </div>
 
@@ -158,11 +156,11 @@
           </div>
           <div class="form-group">
             <label class="form-label">Spark Submit</label>
-            <input name="sparkSubmitCommand" type="text" class="form-control">
+            <input name="sparkSubmitCommand" type="text" class="form-control" placeholder="spark-submit --master yarn --deploy-mode client">
           </div>
           <div class="form-group">
             <label class="form-label">Beeline 命令</label>
-            <input name="beelineCommand" type="text" class="form-control">
+            <input name="beelineCommand" type="text" class="form-control" placeholder="例：beeline -u jdbc:hive2://localhost:10000">
           </div>
         </div>
 
@@ -175,17 +173,17 @@
           </div>
           <div class="form-group">
             <label class="form-label">HDFS 落地目录</label>
-            <input name="hdfsLandingDir" type="text" class="form-control">
+            <input name="hdfsLandingDir" type="text" class="form-control" placeholder="例：/user/hadoop/churn/landing">
           </div>
         </div>
         <div class="form-row-3">
           <div class="form-group">
             <label class="form-label">Hive JDBC URL</label>
-            <input name="hiveJdbcUrl" type="text" class="form-control">
+            <input name="hiveJdbcUrl" type="text" class="form-control" placeholder="例：jdbc:hive2://localhost:10000/churn_db">
           </div>
           <div class="form-group">
             <label class="form-label">Hive 用户名</label>
-            <input name="hiveUsername" type="text" class="form-control">
+            <input name="hiveUsername" type="text" class="form-control" placeholder="例：hadoop">
           </div>
           <div class="form-group">
             <label class="form-label">Hive 密码 <span class="text-muted">(留空不修改)</span></label>
@@ -202,7 +200,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">用户名</label>
-            <input name="mysqlUsername" type="text" class="form-control">
+            <input name="mysqlUsername" type="text" class="form-control" placeholder="例：root">
           </div>
           <div class="form-group">
             <label class="form-label">密码 <span class="text-muted">(留空不修改)</span></label>
@@ -212,8 +210,14 @@
       </form>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" id="cancelModalBtn">取消</button>
-      <button class="btn btn-primary" id="saveProjectBtn">保存</button>
+      <div class="footer-test-area">
+        <div><button type="button" class="btn btn-outline btn-sm" id="testConnBtn">⚡ 测试连接</button></div>
+        <div id="connResult" style="font-size:.82rem;line-height:1.5;word-break:break-all;"></div>
+      </div>
+      <div class="footer-actions">
+        <button class="btn btn-outline" id="cancelModalBtn">取消</button>
+        <button class="btn btn-primary" id="saveProjectBtn">保存</button>
+      </div>
     </div>
   </div>
 </div>

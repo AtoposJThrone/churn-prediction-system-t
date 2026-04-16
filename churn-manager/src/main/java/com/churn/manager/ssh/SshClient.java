@@ -128,20 +128,20 @@ public class SshClient {
                                   String remotePath, int maxLines) {
         String content = readRemoteFile(host, port, username, password, privateKey, remotePath);
         if (content == null) return "";
-        String[] lines = content.split("\n");
+        String[] lines = content.split("\n", -1);
         if (lines.length <= maxLines) return content;
         StringBuilder sb = new StringBuilder();
-        int start = lines.length - maxLines;
-        for (int i = start; i < lines.length; i++) {
+        for (int i = 0; i < maxLines; i++) {
             sb.append(lines[i]).append('\n');
         }
-        return "... (showing last " + maxLines + " lines) ...\n" + sb;
+        return sb + "\n... (仅显示前 " + maxLines + " 行，共 " + lines.length + " 行) ...";
     }
 
     @SuppressWarnings("unchecked")
     public List<RemoteFileEntry> listDirectory(String host, int port,
                                                String username, String password, String privateKey,
                                                String remotePath) {
+        if (remotePath == null || remotePath.isBlank()) remotePath = "/";
         Session session = openSession(host, port, username, password, privateKey);
         try {
             ChannelSftp sftp = (ChannelSftp) session.openChannel("sftp");

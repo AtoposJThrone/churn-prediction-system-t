@@ -84,6 +84,9 @@ public class ProjectController {
         DecryptedSecrets s = projectService.decryptSecrets(id);
         String dir = resolveScope(p, scope);
         String remotePath = (path != null && !path.isBlank()) ? path : dir;
+        if (remotePath == null || remotePath.isBlank()) {
+            remotePath = "/home/hadoop";
+        }
         List<SshClient.RemoteFileEntry> entries = sshClient.listDirectory(
                 p.getHost(), p.getSshPort(), s.sshUsername(), s.sshPassword(), s.sshPrivateKey(), remotePath);
         List<Map<String, Object>> rows = entries.stream().map(e -> {
@@ -102,9 +105,9 @@ public class ProjectController {
     @GetMapping("/{id}/file-content")
     public ApiResponse<Map<String, Object>> fileContent(
             @PathVariable Long id,
-            @RequestParam String scope,
+            @RequestParam(required = false) String scope,
             @RequestParam String path,
-            @RequestParam(defaultValue = "200") int maxLines) {
+            @RequestParam(defaultValue = "500") int maxLines) {
         ManagedProject p = projectService.getOrThrow(id);
         DecryptedSecrets s = projectService.decryptSecrets(id);
         String content = sshClient.readFileContent(
@@ -142,16 +145,34 @@ public class ProjectController {
     }
 
     private String resolveScope(ManagedProject p, String scope) {
+        String projectRoot = normalizePath(
+                (p.getProjectRoot() != null && !p.getProjectRoot().isBlank())
+                        ? p.getProjectRoot() : "/home/hadoop");
         return switch (scope) {
-            case "scripts" -> p.getScriptsDir() != null ? p.getScriptsDir() : p.getProjectRoot() + "/scripts";
-            case "alert_output" -> p.getAlertOutputDir() != null ? p.getAlertOutputDir() : p.getProjectRoot() + "/alert_output";
-            case "experiment_results" -> p.getExperimentResultsDir() != null ? p.getExperimentResultsDir() : p.getProjectRoot() + "/experiment_results";
-            case "plots" -> p.getPlotsDir() != null ? p.getPlotsDir() : p.getProjectRoot() + "/plots";
-            case "logs" -> p.getLogsDir() != null ? p.getLogsDir() : p.getProjectRoot() + "/logs";
-            case "origin" -> p.getOriginDataDir() != null ? p.getOriginDataDir() : "/DataSet_Origin";
-            case "transformed" -> p.getTransformedDataDir() != null ? p.getTransformedDataDir() : "/DataSet_Transformed";
-            default -> p.getProjectRoot() != null ? p.getProjectRoot() : "/home/hadoop";
+            case "scripts"      -> normalizePath((p.getScriptsDir() != null && !p.getScriptsDir().isBlank())
+                    ? p.getScriptsDir() : projectRoot + "/scripts");
+            case "alert_output" -> normalizePath((p.getAlertOutputDir() != null && !p.getAlertOutputDir().isBlank())
+                    ? p.getAlertOutputDir() : projectRoot + "/alert_output");
+            case "experiment_results" -> normalizePath((p.getExperimentResultsDir() != null && !p.getExperimentResultsDir().isBlank())
+                    ? p.getExperimentResultsDir() : projectRoot + "/experiment_results");
+            case "plots"        -> normalizePath((p.getPlotsDir() != null && !p.getPlotsDir().isBlank())
+                    ? p.getPlotsDir() : projectRoot + "/plots");
+            case "logs"         -> normalizePath((p.getLogsDir() != null && !p.getLogsDir().isBlank())
+                    ? p.getLogsDir() : projectRoot + "/logs");
+            case "origin"       -> normalizePath((p.getOriginDataDir() != null && !p.getOriginDataDir().isBlank())
+                    ? p.getOriginDataDir() : "/DataSet_Origin");
+            case "transformed"  -> normalizePath((p.getTransformedDataDir() != null && !p.getTransformedDataDir().isBlank())
+                    ? p.getTransformedDataDir() : "/DataSet_Transformed");
+            default -> projectRoot;
         };
+    }
+
+    /** Collapse duplicate slashes and strip trailing slash. */
+    private static String normalizePath(String path) {
+        if (path == null || path.isBlank()) return "/";
+        path = path.replaceAll("/+", "/");   // collapse //
+        if (path.length() > 1) path = path.replaceAll("/$", ""); // strip trailing /
+        return path;
     }
 
     private Map<String, Object> toSummary(ManagedProject p) {
