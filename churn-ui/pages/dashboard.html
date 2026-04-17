@@ -70,6 +70,22 @@
           <div class="kpi-label">首日未过关数</div>
           <div class="kpi-value warning" id="kpiNoTutorial">—</div>
         </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">人均战斗场次</div>
+          <div class="kpi-value primary" id="kpiAvgBattles">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">卡关用户数</div>
+          <div class="kpi-value danger" id="kpiStuckUsers">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">全体险胜率</div>
+          <div class="kpi-value warning" id="kpiNarrowWin">—</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">TOP2 卡关关卡</div>
+          <div class="kpi-value primary" id="kpiStuckMap2">—</div>
+        </div>
       </div>
 
       <!-- Charts row 1: pie + trend -->
@@ -101,6 +117,14 @@
         <div class="chart-box full">
           <div class="chart-title">特征重要性（随机森林 Top 10）</div>
           <div class="chart-area" style="height:320px;" id="featChart"></div>
+        </div>
+      </div>
+
+      <!-- 关卡卡关热力图 full width -->
+      <div class="charts-grid">
+        <div class="chart-box full">
+          <div class="chart-title">关卡卡关热力图（按失败率降序，高色表示强难）</div>
+          <div class="chart-area" style="height:420px;" id="mapHotspotChart"></div>
         </div>
       </div>
 

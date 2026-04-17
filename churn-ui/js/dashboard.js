@@ -74,6 +74,7 @@
         try { renderFeatureImportance(data.featureImportance); } catch(e) { console.warn('Feature render failed', e); }
         try { renderChurnProbDist(data.recentAlerts); } catch(e) { console.warn('Dist render failed', e); }
         try { setAlerts(data.recentAlerts); } catch(e) { console.warn('Alerts render failed', e); }
+        try { renderMapHotspot(data.mapHotspot); } catch(e) { console.warn('MapHotspot render failed', e); }
     }
 
     // ---- KPI tiles ----
@@ -86,6 +87,59 @@
         document.getElementById('kpiDate').textContent       = s?.statDate ?? '—';
         document.getElementById('kpiStuckMap').textContent   = s?.topStuckMapId ?? '—';
         document.getElementById('kpiNoTutorial').textContent = s?.d1NoTutorialCount?.toLocaleString() ?? '—';
+        // 新增业务洞察 KPI
+        document.getElementById('kpiAvgBattles').textContent = s?.avgBattlesPerUser != null ? s.avgBattlesPerUser.toFixed(1) : '—';
+        document.getElementById('kpiStuckUsers').textContent = s?.stuckUserCount?.toLocaleString() ?? '—';
+        document.getElementById('kpiNarrowWin').textContent  = s?.narrowWinRateOverall != null ? (s.narrowWinRateOverall * 100).toFixed(1) + '%' : '—';
+        document.getElementById('kpiStuckMap2').textContent  = s?.topStuckMapId2 ?? '—';
+    }
+
+    // ---- 关卡卡关热力图（横向柱状图，按失败率降序）----
+    function renderMapHotspot(rows) {
+        const el = document.getElementById('mapHotspotChart');
+        if (!el) return;
+        if (!rows || rows.length === 0) {
+            echarts.init(el, 'dark').setOption({
+                backgroundColor: BG,
+                title: { text: '暂无关卡卡关数据', textStyle: { color: AXIS_COLOR, fontSize: 13 }, left: 'center', top: 'middle' }
+            }, true);
+            return;
+        }
+        // 将难度层映射到颜色
+        const tierColor = { easy: '#3fb950', normal: '#e3b341', hard: '#f85149', extreme: '#c678dd' };
+        const mapIds    = rows.map(r => 'Map ' + (r.map_id ?? r.mapId ?? ''));
+        const failRates = rows.map(r => +(r.fail_rate ?? r.failRate ?? 0) * 100);
+        const tiers     = rows.map(r => r.difficulty_tier ?? r.difficultyTier ?? 'normal');
+        const colors    = tiers.map(t => tierColor[t] || '#58a6ff');
+
+        const cht = echarts.init(el, 'dark');
+        cht.setOption({
+            backgroundColor: BG,
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' },
+                formatter: function(params) {
+                    const idx = params[0].dataIndex;
+                    const r = rows[idx];
+                    return `<b>${mapIds[idx]}</b><br/>失败率: ${failRates[idx].toFixed(1)}%<br/>难度: ${tiers[idx]}<br/>玩家数: ${r.player_count ?? r.playerCount ?? '-'}<br/>高风险玩家: ${r.high_risk_player_count ?? r.highRiskPlayerCount ?? '-'}`;
+                }
+            },
+            grid: { left: 100, right: 30, top: 20, bottom: 40 },
+            xAxis: {
+                type: 'value', name: '失败率 (%)', max: 100,
+                axisLabel: { color: AXIS_COLOR }, axisLine: { lineStyle: { color: AXIS_COLOR } },
+                splitLine: { lineStyle: { color: '#30363d' } }
+            },
+            yAxis: {
+                type: 'category', data: mapIds,
+                axisLabel: { color: AXIS_COLOR, fontSize: 11 },
+                axisLine: { lineStyle: { color: AXIS_COLOR } }
+            },
+            series: [{
+                type: 'bar', data: failRates.map((v, i) => ({ value: v, itemStyle: { color: colors[i] } })),
+                label: { show: true, position: 'right', formatter: p => p.value.toFixed(1) + '%', color: AXIS_COLOR, fontSize: 11 }
+            }]
+        }, true);
     }
 
     // ---- 风险分布饼图 ----

@@ -150,6 +150,11 @@ def build_dwd(spark, battle_log, map_meta):
          .otherwise(2)
     )
 
+    # 字段兼容处理：当 ODS 来自旧版数据（未运行新版 11_data_transform.py）时自动补齐默认値
+    for _col, _default in [("is_narrow_win", 0), ("is_first_attempt", 0)]:
+        if _col not in bl.columns:
+            bl = bl.withColumn(_col, F.lit(_default))
+
     # ── 卡关检测（Bug-1 & Bug-2 双修）──
     w_time = Window.partitionBy("user_id").orderBy("battle_start_ts")
 
@@ -220,6 +225,7 @@ def build_dwd(spark, battle_log, map_meta):
             "cumulative_battles", "consecutive_fail", "is_stuck",
             "day_index", "is_day1", "wave_count", "tower_score",
             "difficulty_num", "map_clear_rate", "map_avg_retry_times",
+            "is_narrow_win", "is_first_attempt",  # 新增业务标记字段
         ]
         bl.select([c for c in dwd_cols if c in bl.columns]) \
           .withColumn("dt", F.lit(RUN_DATE)) \
@@ -357,22 +363,55 @@ def build_dws(spark, bl, session_df):
         F.mean("map_avg_retry_times") .alias("avg_map_retry_rate_played"),
     )
 
+    # I. 新增业务洞察特征
+    # 险胜率：胜利但基地血量极低（<20%），说明玩家在高压局面下仍能获胜，可能具备较强的适应能力和抗压性
+    feat_insights = bl.groupBy("user_id").agg(
+        F.sum(F.col("is_narrow_win").cast("int")) .alias("narrow_win_count"),
+        F.mean(F.col("is_narrow_win").cast("double")) .alias("narrow_win_rate"),
+    )
+
+    # 首次尝试胜率：只统计每个地图第一次挑战的结果，衡量初始难度适应性
+    feat_first_attempt = (
+        bl.filter(F.col("is_first_attempt") == 1)
+        .groupBy("user_id")
+        .agg(F.mean("battle_result").alias("first_attempt_win_rate"))
+    )
+
+    # 重试地图数：有过第2次及以上尝试的地图数，让人看看狗策划做的什么垃圾关卡（生气脸）
+    feat_retry = (
+        bl.filter(F.col("is_first_attempt") == 0)
+        .groupBy("user_id")
+        .agg(F.countDistinct("map_id").alias("retry_map_count"))
+    )
+
     # 汇总全周期
     dws_all = feat_battle \
-        .join(feat_progress,   on="user_id", how="left") \
-        .join(feat_stuck,      on="user_id", how="left") \
-        .join(feat_item_hard,  on="user_id", how="left") \
-        .join(feat_item_fail,  on="user_id", how="left") \
-        .join(feat_session,    on="user_id", how="left") \
-        .join(feat_time,       on="user_id", how="left") \
-        .join(feat_streak,     on="user_id", how="left") \
-        .join(feat_recent,     on="user_id", how="left") \
-        .join(feat_meta,       on="user_id", how="left") \
+        .join(feat_progress,      on="user_id", how="left") \
+        .join(feat_stuck,         on="user_id", how="left") \
+        .join(feat_item_hard,     on="user_id", how="left") \
+        .join(feat_item_fail,     on="user_id", how="left") \
+        .join(feat_session,       on="user_id", how="left") \
+        .join(feat_time,          on="user_id", how="left") \
+        .join(feat_streak,        on="user_id", how="left") \
+        .join(feat_recent,        on="user_id", how="left") \
+        .join(feat_meta,          on="user_id", how="left") \
+        .join(feat_insights,      on="user_id", how="left") \
+        .join(feat_first_attempt, on="user_id", how="left") \
+        .join(feat_retry,         on="user_id", how="left") \
         .fillna(0, subset=[
             "stuck_level_count", "stuck_total_attempts",
             "hard_map_special_rate", "hard_map_battles",
             "fail_special_rate", "severe_fail_streak_ratio",
+            "narrow_win_count", "narrow_win_rate",
+            "first_attempt_win_rate", "retry_map_count",
         ])
+
+    # 关卡推进速率：最高关卡编号 / 观测天数，表示用户关卡推进节奏的快慢
+    dws_all = dws_all.withColumn(
+        "progress_velocity",
+        F.col("max_map_reached").cast("double") /
+        F.greatest(F.col("observation_span_days"), F.lit(1)).cast("double")
+    )
 
     # I. 时间窗口 D1 / D3 / D7
     def window_stats(prefix, max_day):
@@ -399,6 +438,7 @@ def build_dws(spark, bl, session_df):
         F.sum(F.col("battle_duration_s") / 60)       .alias("d1_active_minutes"),
         F.max(F.when(F.col("map_id") == TUTORIAL_MAP_ID,
                      F.col("battle_result")))        .alias("d1_completed_map1"),
+        F.countDistinct("map_id")                    .alias("d1_unique_maps"),  # new：首日探索关卡数
     )
     # Bug-9：以 session 内最小 day_index 判断首日 session
     d1_sessions = session_df.filter(F.col("day_index") == 1) \
@@ -438,16 +478,19 @@ def build_dws(spark, bl, session_df):
             "recent10_win_rate", "recent10_avg_score", "recent10_avg_difficulty",
             "avg_map_clear_rate_played", "min_map_clear_rate_played",
             "avg_map_retry_rate_played",
-        ]
+            # 新增业务洞察特征
+            "narrow_win_count", "narrow_win_rate", "first_attempt_win_rate",
+            "retry_map_count", "progress_velocity",
+        ] # 注意顺序必须与 Hive DDL 完全一致
         dws_all.select(dws_hive_cols) \
                .write.mode("overwrite").format("orc") \
                .saveAsTable(f"{HIVE_DB}.dws_user_battle_stats")
 
         feat_d1.select(["user_id","d1_battles","d1_win_rate","d1_max_map",
                         "d1_completed_map1","d1_special_rate",
-                        "d1_active_minutes","d1_sessions"]) \
+                        "d1_active_minutes","d1_sessions","d1_unique_maps"]) \
                .write.mode("overwrite").format("orc") \
-               .saveAsTable(f"{HIVE_DB}.dws_user_d1_stats")
+               .saveAsTable(f"{HIVE_DB}.dws_user_d1_stats") # 新增 d1_unique_maps
 
         feat_d3.select(["user_id","d3_battles","d3_win_rate","d3_max_map",
                         "d3_active_days","d3_avg_daily_battles",

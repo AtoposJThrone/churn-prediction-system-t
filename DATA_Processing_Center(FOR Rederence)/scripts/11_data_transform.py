@@ -178,7 +178,21 @@ battle_log["tower_score"] = (
     + (1 - battle_log["used_special_tower"]) * 10
 ).round(2)
 
-# ── 3e. 删除辅助合并列 ──
+# ── 3e. 新增业务洞察字段 ──
+# 险胜标记：胜利但基地剩余血量低于 20%
+# 抗压这一块，宁死不从这一块
+battle_log["is_narrow_win"] = (
+    (battle_log["battle_result"] == 1)
+    & (battle_log["base_hp_ratio"] < 0.2)
+).astype(int)
+
+# 首次挑战标记：该用户第一次尝试该地图
+# 按 [user_id, battle_start_time] 排序（步骤3a），cumcount==0 即为首次
+battle_log["is_first_attempt"] = (
+    battle_log.groupby(["user_id", "map_id"]).cumcount() == 0
+).astype(int)
+
+# ── 3f. 删除辅助合并列 ──
 battle_log.drop(columns=["map_avg_duration_s", "map_design_waves"], inplace=True)
 
 print(f"    输出列: {list(battle_log.columns)}")

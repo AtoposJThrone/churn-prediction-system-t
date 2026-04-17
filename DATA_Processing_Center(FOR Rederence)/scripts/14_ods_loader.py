@@ -115,6 +115,8 @@ def load_ods_battle_log():
         StructField("difficulty_tier",    StringType(),  True),
         StructField("wave_count",         IntegerType(), True),
         StructField("tower_score",        FloatType(),   True),
+        StructField("is_narrow_win",      IntegerType(), True),  # 险胜标记
+        StructField("is_first_attempt",   IntegerType(), True),  # 首次挑战标记
     ])
 
     df = spark.read.csv(

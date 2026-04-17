@@ -106,6 +106,7 @@ public class DashboardService {
             List<Map<String, Object>> modelComparison = List.of();
             List<Map<String, Object>> featureImportance = List.of();
             List<Map<String, Object>> recentAlerts = queryRecentAlerts(conn);
+            List<Map<String, Object>> mapHotspot = queryMapHotspot(conn);
 
             List<Map<String, Object>> riskDistribution = List.of(
                     Map.of("name", "高风险", "value", summary.highRiskCount()),
@@ -114,23 +115,34 @@ public class DashboardService {
             );
 
             return new DashboardData(summary, riskTrend, riskDistribution,
-                    modelComparison, featureImportance, recentAlerts,
+                    modelComparison, featureImportance, recentAlerts, mapHotspot,
                     summary.avgChurnProb(), "mysql");
         }
     }
 
     private DashboardData.DailySummary queryDailySummary(Connection conn) throws Exception {
         String sql = "SELECT stat_date, total_active_users, high_risk_count, medium_risk_count, " +
-                "low_risk_count, high_risk_rate, avg_churn_prob, top_stuck_map_id, d1_no_tutorial_count " +
+                "low_risk_count, high_risk_rate, avg_churn_prob, top_stuck_map_id, d1_no_tutorial_count, " +
+                "avg_battles_per_user, stuck_user_count, narrow_win_rate_overall, top_stuck_map_id_2 " +
                 "FROM ads_daily_churn_summary ORDER BY stat_date DESC LIMIT 1";
         try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             if (rs.next()) {
+                // 对新增字段做安全处理，当老版数据库中列不存在时不报错
+                double avgBattles = 0.0;
+                long stuckCnt = 0L;
+                double narrowRate = 0.0;
+                String topMap2 = "-1";
+                try { avgBattles = rs.getDouble("avg_battles_per_user"); } catch (Exception ignored) {}
+                try { stuckCnt   = rs.getLong("stuck_user_count"); }      catch (Exception ignored) {}
+                try { narrowRate = rs.getDouble("narrow_win_rate_overall"); } catch (Exception ignored) {}
+                try { topMap2    = rs.getString("top_stuck_map_id_2"); }   catch (Exception ignored) {}
                 return new DashboardData.DailySummary(
                         rs.getString("stat_date"), rs.getLong("total_active_users"),
                         rs.getLong("high_risk_count"), rs.getLong("medium_risk_count"),
                         rs.getLong("low_risk_count"), rs.getDouble("high_risk_rate"),
                         rs.getDouble("avg_churn_prob"), rs.getString("top_stuck_map_id"),
-                        rs.getLong("d1_no_tutorial_count"));
+                        rs.getLong("d1_no_tutorial_count"),
+                        avgBattles, stuckCnt, narrowRate, topMap2);
             }
         }
         throw new RuntimeException("ads_daily_churn_summary 无数据");
@@ -147,6 +159,19 @@ public class DashboardService {
         String sql = "SELECT user_id, churn_prob, risk_level, top_reason_1 AS topReason " +
                 "FROM ads_user_churn_risk WHERE final_alert = 1 ORDER BY churn_prob DESC LIMIT 50";
         return queryToList(conn, sql);
+    }
+
+    /** 关卡卡关热力图：按失败率降序，取前 30 个关卡 */
+    private List<Map<String, Object>> queryMapHotspot(Connection conn) throws Exception {
+        String sql = "SELECT map_id, difficulty_tier, total_attempts, fail_rate, avg_hp_ratio, " +
+                "help_usage_rate, player_count, high_risk_player_count, map_clear_rate " +
+                "FROM ads_map_churn_hotspot ORDER BY fail_rate DESC LIMIT 30";
+        try {
+            return queryToList(conn, sql);
+        } catch (Exception e) {
+            log.warn("关卡热力图查询失败（表可能尚未创建）: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private List<Map<String, Object>> queryToList(Connection conn, String sql) throws Exception {
@@ -207,13 +232,22 @@ public class DashboardService {
         List<Map<String, Object>> riskTrend = parseRiskTrend(summaryStr);
 
         return new DashboardData(summary, riskTrend, riskDistribution,
-                modelComparison, featureImportance, recentAlerts,
+                modelComparison, featureImportance, recentAlerts, List.of(),
                 summary.avgChurnProb(), source);
     }
 
     private DashboardData.DailySummary parseDailySummary(String csv) throws Exception {
         try (CSVParser parser = CSVParser.parse(csv, CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build())) {
             for (CSVRecord r : parser) {
+                // 对新增字段做容错处理，旧版 CSV 中可能不存在这些列
+                double avgBattles = 0.0;
+                long stuckCnt = 0L;
+                double narrowRate = 0.0;
+                String topMap2 = "-1";
+                try { avgBattles = parseDouble(r.get("avg_battles_per_user")); } catch (Exception ignored) {}
+                try { stuckCnt   = parseLong(r.get("stuck_user_count")); }      catch (Exception ignored) {}
+                try { narrowRate = parseDouble(r.get("narrow_win_rate_overall")); } catch (Exception ignored) {}
+                try { topMap2    = r.get("top_stuck_map_id_2"); }               catch (Exception ignored) {}
                 return new DashboardData.DailySummary(
                         r.get("stat_date"),
                         parseLong(r.get("total_active_users")),
@@ -223,7 +257,8 @@ public class DashboardService {
                         parseDouble(r.get("high_risk_rate")),
                         parseDouble(r.get("avg_churn_prob")),
                         r.get("top_stuck_map_id"),
-                        parseLong(r.get("d1_no_tutorial_count")));
+                        parseLong(r.get("d1_no_tutorial_count")),
+                        avgBattles, stuckCnt, narrowRate, topMap2);
             }
         }
         throw new RuntimeException("daily_summary.csv 无数据行");

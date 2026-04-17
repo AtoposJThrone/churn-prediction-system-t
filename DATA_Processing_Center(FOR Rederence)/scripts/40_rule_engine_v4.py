@@ -76,6 +76,7 @@ except Exception:  # pragma: no cover
 PROJECT_DIR = env("TD_CHURN_PROJECT_DIR", "/home/hadoop/td_churn_project")
 MODEL_DIR = env("TD_CHURN_MODEL_DIR", f"{PROJECT_DIR}/models")
 MODEL_PATH = env("TD_CHURN_RF_MODEL_PATH", f"{MODEL_DIR}/rf_model")
+HIVE_DB = env("TD_CHURN_HIVE_DB", "td_churn")  # Hive 库名，用于读取 DWD 表聚合关卡热力图
 
 FEATURE_DIR = env("TD_CHURN_ETL_OUTPUT_DIR", f"{PROJECT_DIR}/etl_output_v2")
 OUTPUT_DIR = env("TD_CHURN_ALERT_OUTPUT_DIR", f"{PROJECT_DIR}/alert_output")
@@ -166,6 +167,20 @@ RULES = [
         "condition": lambda r: r.get("d3_active_days", 3) <= 1 and r.get("total_battles", 0) > 0,
         "force_high": False,
     },
+    {
+        "code": "R008",
+        "name": "关卡进度停滞",
+        "description": "用户已有一定活跃天数但关卡推进极慢（每天不足半关），说明玩家正反馈不足，随时可能润",
+        "condition": lambda r: r.get("progress_velocity", 1.0) < 0.5 and r.get("active_days", 0) >= 3,
+        "force_high": False,
+    },
+    {
+        "code": "R009",
+        "name": "首日卡在第一关",
+        "description": "用户首日只接触了一个关卡却反复尝试，说明新手引导设计存在缺陷或玩家能力较差",
+        "condition": lambda r: r.get("d1_unique_maps", 2) == 1 and r.get("d1_battles", 0) >= 3,
+        "force_high": False,
+    },
 ]
 
 
@@ -215,6 +230,11 @@ FEATURE_REASON_MAP = {
     "battles_per_active_day": "日均战斗场次少，粘性不足",
     "max_map_reached": "关卡进度停滞",
     "avg_tower_score": "防守表现持续较差",
+    # 新增业务洞察特征对应的流失原因
+    "narrow_win_rate": "残血局多，长期处于高压力局面（小失即导致流失）",
+    "first_attempt_win_rate": "首次尝试胜率低，关卡难度进阶时沉没感强",
+    "progress_velocity": "关卡推进速度极慢，玩家处于游戏瓶颈期",
+    "d1_unique_maps": "首日仅探索了一个关卡且多次尝试失败，入门关设计缺陷明显",
 }
 
 # def get_top_reasons(user_row: dict, model: lgb.Booster, feature_names: list,
@@ -253,8 +273,17 @@ def get_top_reasons(user_row: dict, rule_descs: list, n=3) -> list[str]:
                     "max_map_reached",
                     "avg_tower_score",
                     "d1_completed_map1",
+                    "first_attempt_win_rate",  # 新增：首次尝试胜率低是坏信号
+                    "progress_velocity",       # 新增：进度速率极慢是坏信号
+                    "d1_unique_maps",           # 新增：首日只接触 1 个关卡是坏信号
                 }
-                bad_high = {"avg_session_gap_s", "max_consecutive_fail", "stuck_level_count", "fail_special_rate"}
+                bad_high = {
+                    "avg_session_gap_s",
+                    "max_consecutive_fail",
+                    "stuck_level_count",
+                    "fail_special_rate",
+                    "narrow_win_rate",  # 新增：险胜率持续过高说明长期处于高压力局面
+                }
 
                 if (feat in bad_low and val < 0.3) or (feat in bad_high and val > 0.7):
                     reasons.append(reason_text)
@@ -583,16 +612,27 @@ def run_alert_pipeline():
 
     # 2) 当日卡关最多的地图ID（first_stuck_map_id 的众数/最高频）
     top_stuck_map_id = -1
+    top_stuck_map_id_2 = -1
     if "first_stuck_map_id" in feature_df.columns:
         tmp = feature_df["first_stuck_map_id"].dropna()
-        # 过滤无效值（0 或负数），并尽量转 int
         try:
             tmp = tmp.astype(int)
             tmp = tmp[tmp > 0]
         except Exception:
             pass
         if len(tmp) > 0:
-            top_stuck_map_id = int(tmp.value_counts().idxmax())
+            vc = tmp.value_counts()
+            top_stuck_map_id = int(vc.index[0])
+            if len(vc) >= 2:
+                top_stuck_map_id_2 = int(vc.index[1])  # 第二高卡关地图
+
+    # 3) 新增汇总指标（需新特征字段，旧版 parquet 中若不存在则返回 0）
+    avg_battles_per_user = float(round(feature_df["total_battles"].mean(), 2)) \
+        if "total_battles" in feature_df.columns else 0.0
+    stuck_user_count = int((feature_df["stuck_level_count"] > 0).sum()) \
+        if "stuck_level_count" in feature_df.columns else 0
+    narrow_win_rate_overall = float(round(feature_df["narrow_win_rate"].mean(), 4)) \
+        if "narrow_win_rate" in feature_df.columns else 0.0
 
     summary = {
         "stat_date": RUN_DT,
@@ -604,6 +644,11 @@ def run_alert_pipeline():
         "avg_churn_prob": float(round(result_df["churn_prob"].mean(), 4)),
         "top_stuck_map_id": int(top_stuck_map_id),
         "d1_no_tutorial_count": int(d1_no_tutorial_count),
+        # 新增扩展字段
+        "avg_battles_per_user": avg_battles_per_user,
+        "stuck_user_count": stuck_user_count,
+        "narrow_win_rate_overall": narrow_win_rate_overall,
+        "top_stuck_map_id_2": int(top_stuck_map_id_2),
     }
 
     pd.DataFrame([summary]).to_csv(
@@ -622,15 +667,19 @@ def run_alert_pipeline():
                 f"""
                 INSERT OVERWRITE TABLE td_churn.ads_daily_churn_summary PARTITION (dt='{RUN_DT}')
                 SELECT
-                    CAST(stat_date AS STRING)            AS stat_date,
-                    CAST(total_active_users AS INT)      AS total_active_users,
-                    CAST(high_risk_count AS INT)         AS high_risk_count,
-                    CAST(medium_risk_count AS INT)       AS medium_risk_count,
-                    CAST(low_risk_count AS INT)          AS low_risk_count,
-                    CAST(high_risk_rate AS FLOAT)        AS high_risk_rate,
-                    CAST(avg_churn_prob AS FLOAT)        AS avg_churn_prob,
-                    CAST(top_stuck_map_id AS INT)        AS top_stuck_map_id,
-                    CAST(d1_no_tutorial_count AS INT)    AS d1_no_tutorial_count
+                    CAST(stat_date AS STRING)              AS stat_date,
+                    CAST(total_active_users AS INT)        AS total_active_users,
+                    CAST(high_risk_count AS INT)           AS high_risk_count,
+                    CAST(medium_risk_count AS INT)         AS medium_risk_count,
+                    CAST(low_risk_count AS INT)            AS low_risk_count,
+                    CAST(high_risk_rate AS FLOAT)          AS high_risk_rate,
+                    CAST(avg_churn_prob AS FLOAT)          AS avg_churn_prob,
+                    CAST(top_stuck_map_id AS INT)          AS top_stuck_map_id,
+                    CAST(d1_no_tutorial_count AS INT)      AS d1_no_tutorial_count,
+                    CAST(avg_battles_per_user AS FLOAT)    AS avg_battles_per_user,
+                    CAST(stuck_user_count AS INT)          AS stuck_user_count,
+                    CAST(narrow_win_rate_overall AS FLOAT) AS narrow_win_rate_overall,
+                    CAST(top_stuck_map_id_2 AS INT)        AS top_stuck_map_id_2
                 FROM tmp_ads_daily_churn_summary_v2
                 """
             )
@@ -641,15 +690,19 @@ def run_alert_pipeline():
                 """
                 INSERT OVERWRITE TABLE td_churn.ads_daily_churn_summary
                 SELECT
-                    CAST(stat_date AS STRING)            AS stat_date,
-                    CAST(total_active_users AS INT)      AS total_active_users,
-                    CAST(high_risk_count AS INT)         AS high_risk_count,
-                    CAST(medium_risk_count AS INT)       AS medium_risk_count,
-                    CAST(low_risk_count AS INT)          AS low_risk_count,
-                    CAST(high_risk_rate AS FLOAT)        AS high_risk_rate,
-                    CAST(avg_churn_prob AS FLOAT)        AS avg_churn_prob,
-                    CAST(top_stuck_map_id AS INT)        AS top_stuck_map_id,
-                    CAST(d1_no_tutorial_count AS INT)    AS d1_no_tutorial_count
+                    CAST(stat_date AS STRING)              AS stat_date,
+                    CAST(total_active_users AS INT)        AS total_active_users,
+                    CAST(high_risk_count AS INT)           AS high_risk_count,
+                    CAST(medium_risk_count AS INT)         AS medium_risk_count,
+                    CAST(low_risk_count AS INT)            AS low_risk_count,
+                    CAST(high_risk_rate AS FLOAT)          AS high_risk_rate,
+                    CAST(avg_churn_prob AS FLOAT)          AS avg_churn_prob,
+                    CAST(top_stuck_map_id AS INT)          AS top_stuck_map_id,
+                    CAST(d1_no_tutorial_count AS INT)      AS d1_no_tutorial_count,
+                    CAST(avg_battles_per_user AS FLOAT)    AS avg_battles_per_user,
+                    CAST(stuck_user_count AS INT)          AS stuck_user_count,
+                    CAST(narrow_win_rate_overall AS FLOAT) AS narrow_win_rate_overall,
+                    CAST(top_stuck_map_id_2 AS INT)        AS top_stuck_map_id_2
                 FROM tmp_ads_daily_churn_summary_v2
                 """
             )
@@ -677,6 +730,76 @@ def run_alert_pipeline():
         print("  MySQL → ads_daily_churn_summary 写出成功")
     except Exception as e:
         print(f"  [WARN] MySQL 写 ads_daily_churn_summary 跳过: {e}")
+
+    # ───────────────────────────────────────────────────────────
+    # [NEW] 关卡卡关热力图（ads_map_churn_hotspot）
+    #   从 DWD 层战斗明细聚合各关卡的失败率、险胜率、高风险玩家数等指标
+    # ───────────────────────────────────────────────────────────
+    try:
+        dwd = spark.table(f"{HIVE_DB}.dwd_battle_detail")
+        map_hotspot_sdf = dwd.groupBy("map_id", "difficulty_tier").agg(
+            F.count("*").alias("total_attempts"),
+            (F.lit(1) - F.mean("battle_result")).alias("fail_rate"),
+            F.mean("base_hp_ratio").alias("avg_hp_ratio"),
+            F.mean("used_special_tower").alias("help_usage_rate"),
+            F.countDistinct("user_id").alias("player_count"),
+            F.mean("map_clear_rate").alias("map_clear_rate"),
+        )
+
+        # 关联高风险玩家数（已判定为高风险的玩家）
+        high_risk_uid = result_sdf.filter(F.col("risk_level") == "high").select("user_id")
+        high_risk_per_map = (
+            dwd.join(high_risk_uid, on="user_id", how="inner")
+               .groupBy("map_id")
+               .agg(F.countDistinct("user_id").alias("high_risk_player_count"))
+        )
+        map_hotspot_sdf = (
+            map_hotspot_sdf
+            .join(high_risk_per_map, on="map_id", how="left")
+            .fillna({"high_risk_player_count": 0})
+            .withColumn("stat_date", F.lit(RUN_DT))
+        )
+
+        # 写 Hive
+        try:
+            map_hotspot_sdf.createOrReplaceTempView("tmp_ads_map_churn_hotspot")
+            spark.sql(f"""
+                INSERT OVERWRITE TABLE {HIVE_DB}.ads_map_churn_hotspot PARTITION (dt='{RUN_DT}')
+                SELECT map_id, difficulty_tier,
+                       CAST(total_attempts AS INT),
+                       CAST(fail_rate AS FLOAT),
+                       CAST(avg_hp_ratio AS FLOAT),
+                       CAST(help_usage_rate AS FLOAT),
+                       CAST(player_count AS INT),
+                       CAST(high_risk_player_count AS INT),
+                       CAST(map_clear_rate AS FLOAT),
+                       stat_date
+                FROM tmp_ads_map_churn_hotspot
+            """)
+            print(f"  Hive → {HIVE_DB}.ads_map_churn_hotspot 分区 dt={RUN_DT} 写出成功")
+        except Exception as e_hive:
+            print(f"  [WARN] Hive 写 ads_map_churn_hotspot 跳过: {e_hive}")
+
+        # 写 MySQL
+        try:
+            mysql_exec_sql(
+                spark, MYSQL_URL, MYSQL_USER, MYSQL_PASS,
+                f"DELETE FROM ads_map_churn_hotspot WHERE stat_date = '{RUN_DT}';")
+            map_hotspot_sdf.write \
+                .format("jdbc") \
+                .option("url", MYSQL_URL) \
+                .option("dbtable", "ads_map_churn_hotspot") \
+                .option("user", MYSQL_USER) \
+                .option("password", MYSQL_PASS) \
+                .option("driver", "com.mysql.cj.jdbc.Driver") \
+                .mode("append") \
+                .save()
+            print("  MySQL → ads_map_churn_hotspot 写出成功")
+        except Exception as e_mysql:
+            print(f"  [WARN] MySQL 写 ads_map_churn_hotspot 跳过: {e_mysql}")
+
+    except Exception as e:
+        print(f"  [WARN] 关卡卡关热力图聚合跳过: {e}")
 
     spark.stop()
     print("\n√√√ 规则引擎预警完成")

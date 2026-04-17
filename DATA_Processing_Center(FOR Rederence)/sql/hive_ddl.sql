@@ -32,8 +32,10 @@ CREATE EXTERNAL TABLE IF NOT EXISTS ods_battle_log (
     cumulative_battles  INT        COMMENT '累计战斗场次',
     consecutive_fail    INT        COMMENT '当前连续失败次数',
     difficulty_tier     STRING     COMMENT '地图难度分级',
-    wave_count          INT        COMMENT '经历波次数',
-    tower_score         FLOAT      COMMENT '防守综合评分'
+    wave_count          INT     COMMENT '经历波次数',
+    tower_score         FLOAT   COMMENT '防守综合评分',
+    is_narrow_win       TINYINT COMMENT '险胜标记：胜利且基地血量<20%（新增）',
+    is_first_attempt    TINYINT COMMENT '首次挑战标记：用户第一次尝试该地图（新增）'
 )
 COMMENT 'ODS层-战斗日志原始表'
 PARTITIONED BY (dt STRING COMMENT '数据日期 yyyy-MM-dd')
@@ -176,7 +178,13 @@ CREATE TABLE IF NOT EXISTS dws_user_battle_stats (
     -- 地图元数据聚合
     avg_map_clear_rate_played   FLOAT  COMMENT '游玩地图平均通关率',
     min_map_clear_rate_played   FLOAT  COMMENT '游玩地图最低通关率',
-    avg_map_retry_rate_played   FLOAT  COMMENT '游玩地图平均重试率'
+    avg_map_retry_rate_played   FLOAT  COMMENT '游玩地图平均重试率',
+    -- 新增业务洞察特征
+    narrow_win_count            INT    COMMENT '险胜场次（新增）',
+    narrow_win_rate             FLOAT  COMMENT '险胜率（新增）',
+    first_attempt_win_rate      FLOAT  COMMENT '首次尝试胜率（新增）',
+    retry_map_count             INT    COMMENT '重试过的地图数（新增）',
+    progress_velocity           FLOAT  COMMENT '关卡推进速率（新增）'
 )
 COMMENT 'DWS层-用户全周期战斗统计'
 STORED AS ORC
@@ -191,7 +199,8 @@ CREATE TABLE IF NOT EXISTS dws_user_d1_stats (
     d1_completed_map1     TINYINT COMMENT '首日是否完成第1关（新手引导）',
     d1_special_rate       FLOAT  COMMENT '首日特殊塔使用率',
     d1_active_minutes     FLOAT  COMMENT '首日活跃时长（分钟）',
-    d1_sessions           INT    COMMENT '首日会话数'
+    d1_sessions           INT    COMMENT '首日会话数',
+    d1_unique_maps        INT    COMMENT '首日探索关卡数（新增）'
 )
 COMMENT 'DWS层-用户首日(D1)行为特征';
 
@@ -254,7 +263,11 @@ CREATE TABLE IF NOT EXISTS ads_daily_churn_summary (
     high_risk_rate       FLOAT   COMMENT '高风险占比',
     avg_churn_prob       FLOAT   COMMENT '全体平均流失概率',
     top_stuck_map_id     INT     COMMENT '当日卡关最多的地图ID',
-    d1_no_tutorial_count INT     COMMENT '首日未完成新手引导用户数'
+    d1_no_tutorial_count INT     COMMENT '首日未完成新手引导用户数',
+    avg_battles_per_user FLOAT   COMMENT '人均战斗场次（新增）',
+    stuck_user_count     INT     COMMENT '居円用户数（新增）',
+    narrow_win_rate_overall FLOAT COMMENT '全体险胜率（新增）',
+    top_stuck_map_id_2   INT     COMMENT '第二高卡关地图ID（新增）'
 )
 COMMENT 'ADS层-每日流失态势汇总';
 
@@ -265,3 +278,24 @@ COMMENT 'ADS层-每日流失态势汇总';
 -- MSCK REPAIR TABLE ods_battle_log;
 -- MSCK REPAIR TABLE dwd_battle_detail;
 -- MSCK REPAIR TABLE ads_user_churn_risk;
+-- MSCK REPAIR TABLE ads_map_churn_hotspot;
+
+-- =============================================================
+-- ADS 层：关卡卡关热力图（面向大屏展示）
+-- =============================================================
+CREATE TABLE IF NOT EXISTS ads_map_churn_hotspot (
+    map_id                  INT     COMMENT '地图ID',
+    difficulty_tier         STRING  COMMENT '难度分级：easy/normal/hard/extreme',
+    total_attempts          INT     COMMENT '总尝试场次',
+    fail_rate               FLOAT   COMMENT '失败率',
+    avg_hp_ratio            FLOAT   COMMENT '平均基地剩余血量比例',
+    help_usage_rate         FLOAT   COMMENT '特殊塔/道具使用率',
+    player_count            INT     COMMENT '玩该地图玩家数',
+    high_risk_player_count  INT     COMMENT '高风险玩家数',
+    map_clear_rate          FLOAT   COMMENT '地图历史平均通关率',
+    stat_date               STRING  COMMENT '统计日期'
+)
+COMMENT 'ADS层-关卡卡关热力图（大屏展示）'
+PARTITIONED BY (dt STRING COMMENT '跑批日期')
+STORED AS ORC
+TBLPROPERTIES ('orc.compress'='SNAPPY');
