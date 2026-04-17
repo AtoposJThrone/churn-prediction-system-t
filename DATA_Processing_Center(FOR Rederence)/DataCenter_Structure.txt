@@ -1,0 +1,53 @@
+虚拟机（数据处理集群）中的文件放置路径规范文档
+
+1.master(主机)本地项目结构：
+/home/hadoop/td_churn_project/
+├── scripts/                                   # 脚本
+│   ├── transform_to_td.py         # 原始数据塔防模式映射处理
+│   ├── etl_pipeline_v2.py            # 映射后数据的预处理和特征工程
+│   ├── model_training.py           # 模型训练与比较
+│   └── rule_engine.py                 # 规则引擎和流失识别预测
+├── sql/                                         # 建库建表
+│   └── hive_ddl.sql 
+├── etl_output_v2/                       # ETL 输出
+│   ├── features_train.parquet
+│   ├── features_dev.parquet
+│   └── features_test.parquet
+├── models/                                  # 输出模型
+│   ├── lightgbm.txt
+│   └── 其他可能有的模型文件
+└── alert_output/                         # 输出（CSV + 日态势）
+    ├── alert_result.csv
+    └── daily_summary.csv
+
+2.master本地原始数据与处理后数据集
+/DataSet_Origin/ 
+├── level_seq.csv
+├── level_meta.csv
+├── train.csv
+├── dev.csv
+└── test.csv
+
+/DataSet_Transformed/  
+├── battle_log.csv                         # 需再按 dt 切分成 4 份用于分区入仓，dt包含2020-02-01到2020-02-04四天
+├── map_meta.csv
+├── train.csv / dev.csv / test.csv  # 仅备份。入仓用合并后的 user_label_all.csv
+└── user_label_all.csv                    # 由train、test和dev合并所得：user_id,label,split
+
+3.HDFS staging
+/tmp/td_churn/ods_upload/
+├── ods_battle_log/
+│   ├── battle_log_2020-02-01.csv
+│   ├── battle_log_2020-02-02.csv
+│   ├── battle_log_2020-02-03.csv
+│   └── battle_log_2020-02-04.csv
+├── ods_map_meta/
+│   └── map_meta.csv
+└── ods_user_label/
+    └── user_label_all.csv
+
+4.Hive表落地位置
+/user/hive/warehouse/td_churn.db/
+├── ods_battle_log/                # 外部表 location（分区 dt）
+├── ods_map_meta/                  # 外部表 location（无分区）
+└── ods_user_label/                # 外部表 location（无分区）

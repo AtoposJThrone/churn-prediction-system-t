@@ -9,6 +9,11 @@ old/
 Origin_Data/*.csv
 Graduation_Project_Documents/
 Documents/*.md
-DATA_Processing_Center(FOR Rederence)/
-.vscode/
+DATA_Processing_Center(FOR Rederence)/alert_output/*.csv
+DATA_Processing_Center(FOR Rederence)/eda_output/*
+DATA_Processing_Center(FOR Rederence)/etl_output_v2/*
+DATA_Processing_Center(FOR Rederence)/experiment_results/*
+DATA_Processing_Center(FOR Rederence)/logs/*
+DATA_Processing_Center(FOR Rederence)/models/*
+DATA_Processing_Center(FOR Rederence)/plots/*
 *.md
