@@ -89,7 +89,9 @@ public class DashboardService {
         if (summaryContent == null || alertContent == null) throw new RuntimeException(
                 "远程 CSV 文件为空或不存在（" + alertDir + "/daily_summary.csv 或 alert_result.csv），请先执行规则引擎步骤生成输出文件");
 
-        return buildFromCsvStrings(summaryContent, alertContent, modelContent, featContent, "remote");
+        // 热力图统一来自 MySQL ADS 表，remote 场景下也进行回填
+        List<Map<String, Object>> mapHotspot = loadMapHotspotFromMysql(s);
+        return buildFromCsvStrings(summaryContent, alertContent, modelContent, featContent, "remote", mapHotspot);
     }
 
     // -------------------------------------------------------------------------
@@ -107,6 +109,7 @@ public class DashboardService {
             List<Map<String, Object>> featureImportance = List.of();
             List<Map<String, Object>> recentAlerts = queryRecentAlerts(conn);
             List<Map<String, Object>> mapHotspot = queryMapHotspot(conn);
+            List<Integer> churnProbDist = queryChurnProbDistribution(conn);
 
             List<Map<String, Object>> riskDistribution = List.of(
                     Map.of("name", "高风险", "value", summary.highRiskCount()),
@@ -116,7 +119,18 @@ public class DashboardService {
 
             return new DashboardData(summary, riskTrend, riskDistribution,
                     modelComparison, featureImportance, recentAlerts, mapHotspot,
-                    summary.avgChurnProb(), "mysql");
+                    summary.avgChurnProb(), "mysql", churnProbDist);
+        }
+    }
+
+    private List<Map<String, Object>> loadMapHotspotFromMysql(DecryptedSecrets s) {
+        if (s == null || s.mysqlUrl() == null || s.mysqlUrl().isBlank()) return List.of();
+        try (Connection conn = DriverManager.getConnection(
+                s.mysqlUrl(), s.mysqlUsername(), s.mysqlPassword())) {
+            return queryMapHotspot(conn);
+        } catch (Exception e) {
+            log.warn("MySQL 热力图数据加载失败（将返回空数据）: {}", e.getMessage());
+            return List.of();
         }
     }
 
@@ -149,15 +163,19 @@ public class DashboardService {
     }
 
     private List<Map<String, Object>> queryRiskTrend(Connection conn) throws Exception {
-        String sql = "SELECT stat_date, high_risk_count, medium_risk_count, low_risk_count " +
-                "FROM ads_daily_churn_summary ORDER BY stat_date DESC LIMIT 30";
+        String sql = "SELECT dt AS stat_date, " +
+                "SUM(CASE WHEN risk_level = 'high' THEN 1 ELSE 0 END) AS high_risk_count, " +
+                "SUM(CASE WHEN risk_level = 'medium' THEN 1 ELSE 0 END) AS medium_risk_count, " +
+                "SUM(CASE WHEN risk_level = 'low' THEN 1 ELSE 0 END) AS low_risk_count " +
+                "FROM ads_user_churn_risk WHERE dt IS NOT NULL " +
+                "GROUP BY dt ORDER BY dt";
         return queryToList(conn, sql);
     }
 
     private List<Map<String, Object>> queryRecentAlerts(Connection conn) throws Exception {
-        // MySQL ADS 层实际表名为 ads_user_churn_risk（由 40_rule_engine_v4.py 写入）
-        String sql = "SELECT user_id, churn_prob, risk_level, top_reason_1 AS topReason " +
-                "FROM ads_user_churn_risk WHERE final_alert = 1 ORDER BY churn_prob DESC LIMIT 50";
+        // 随机抽取30条用户数据
+        String sql = "SELECT user_id, churn_prob, risk_level, final_alert, top_reason_1 AS topReason " +
+                "FROM ads_user_churn_risk ORDER BY RAND() LIMIT 30";
         return queryToList(conn, sql);
     }
 
@@ -172,6 +190,23 @@ public class DashboardService {
             log.warn("关卡热力图查询失败（表可能尚未创建）: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    /** 用户流失概率分布：10个桶统计 */
+    private List<Integer> queryChurnProbDistribution(Connection conn) throws Exception {
+        int[] dist = new int[10];
+        String sql = "SELECT LEAST(FLOOR(churn_prob * 10), 9) AS bucket, COUNT(*) AS cnt " +
+                     "FROM ads_user_churn_risk GROUP BY LEAST(FLOOR(churn_prob * 10), 9) ORDER BY bucket";
+        try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(sql)) {
+            while (rs.next()) {
+                int bucket = rs.getInt("bucket");
+                int cnt = rs.getInt("cnt");
+                if (bucket >= 0 && bucket < 10) dist[bucket] = cnt;
+            }
+        }
+        List<Integer> result = new ArrayList<>();
+        for (int b : dist) result.add(b);
+        return result;
     }
 
     private List<Map<String, Object>> queryToList(Connection conn, String sql) throws Exception {
@@ -198,7 +233,7 @@ public class DashboardService {
             String alertContent = readClasspath("fallback/alert_result.csv");
             String modelContent = readClasspath("fallback/model_comparison_full.csv");
             String featContent = readClasspath("fallback/feat_imp_randomforest.csv");
-            return buildFromCsvStrings(summaryContent, alertContent, modelContent, featContent, "fallback");
+            return buildFromCsvStrings(summaryContent, alertContent, modelContent, featContent, "fallback", List.of());
         } catch (Exception e) {
             log.error("Fallback load failed: {}", e.getMessage());
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "仪表盘数据加载失败：" + e.getMessage());
@@ -211,14 +246,15 @@ public class DashboardService {
 
     private DashboardData buildFromCsvStrings(String summaryStr, String alertStr,
                                                String modelStr, String featStr,
-                                               String source) throws Exception {
+                                               String source,
+                                               List<Map<String, Object>> mapHotspot) throws Exception {
         // Strip UTF-8 BOM (\uFEFF) that Windows-generated CSV files may carry
         summaryStr = stripBom(summaryStr);
         alertStr   = stripBom(alertStr);
         modelStr   = stripBom(modelStr);
         featStr    = stripBom(featStr);
         DashboardData.DailySummary summary = parseDailySummary(summaryStr);
-        List<Map<String, Object>> recentAlerts = parseAlerts(alertStr);
+        List<Map<String, Object>> allAlerts = parseAllAlerts(alertStr);
         List<Map<String, Object>> modelComparison = modelStr != null ? parseModelComparison(modelStr) : List.of();
         List<Map<String, Object>> featureImportance = featStr != null ? parseFeatureImportance(featStr) : List.of();
 
@@ -228,12 +264,29 @@ public class DashboardService {
                 Map.of("name", "低风险", "value", summary.lowRiskCount())
         );
 
-        // Build multi-row trend from all rows in daily_summary CSV
-        List<Map<String, Object>> riskTrend = parseRiskTrend(summaryStr);
+        // Compute risk trend from alert data (grouped by dt)
+        List<Map<String, Object>> riskTrend = computeRiskTrendFromAlerts(allAlerts);
+        // If no dt-based trend available, fall back to daily_summary trend
+        if (riskTrend.isEmpty()) {
+            riskTrend = parseRiskTrend(summaryStr);
+        }
+
+        // Compute churn probability distribution from all users
+        List<Integer> churnProbDist = computeDistribution(allAlerts);
+
+        // Random sample 30 for the alert table
+        List<Map<String, Object>> recentAlerts;
+        if (allAlerts.size() <= 30) {
+            recentAlerts = allAlerts;
+        } else {
+            List<Map<String, Object>> shuffled = new ArrayList<>(allAlerts);
+            Collections.shuffle(shuffled);
+            recentAlerts = new ArrayList<>(shuffled.subList(0, 30));
+        }
 
         return new DashboardData(summary, riskTrend, riskDistribution,
-                modelComparison, featureImportance, recentAlerts, List.of(),
-                summary.avgChurnProb(), source);
+            modelComparison, featureImportance, recentAlerts, mapHotspot,
+                summary.avgChurnProb(), source, churnProbDist);
     }
 
     private DashboardData.DailySummary parseDailySummary(String csv) throws Exception {
@@ -281,22 +334,63 @@ public class DashboardService {
         return list;
     }
 
-    private List<Map<String, Object>> parseAlerts(String csv) throws Exception {
+    private List<Map<String, Object>> parseAllAlerts(String csv) throws Exception {
         List<Map<String, Object>> list = new ArrayList<>();
         try (CSVParser parser = CSVParser.parse(csv, CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build())) {
-            int count = 0;
             for (CSVRecord r : parser) {
-                if (count++ >= 50) break;
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("userId", r.get("user_id"));
                 m.put("churnProb", parseDouble(r.get("churn_prob")));
                 m.put("riskLevel", r.get("risk_level"));
                 m.put("finalAlert", r.get("final_alert"));
                 m.put("topReason", r.get("top_reason_1"));
+                try { m.put("dt", r.get("dt")); } catch (Exception ignored) {}
                 list.add(m);
             }
         }
         return list;
+    }
+
+    /** Compute 10-bucket churn probability distribution from all alerts */
+    private List<Integer> computeDistribution(List<Map<String, Object>> alerts) {
+        int[] buckets = new int[10];
+        for (Map<String, Object> a : alerts) {
+            double prob = 0.0;
+            Object p = a.get("churnProb");
+            if (p instanceof Number) prob = ((Number) p).doubleValue();
+            int idx = Math.min(9, Math.max(0, (int)(prob * 10)));
+            buckets[idx]++;
+        }
+        List<Integer> result = new ArrayList<>();
+        for (int b : buckets) result.add(b);
+        return result;
+    }
+
+    /** Compute risk trend by grouping alerts by dt */
+    private List<Map<String, Object>> computeRiskTrendFromAlerts(List<Map<String, Object>> alerts) {
+        Map<String, int[]> dateMap = new TreeMap<>();
+        for (Map<String, Object> a : alerts) {
+            Object dtObj = a.get("dt");
+            String dt = dtObj != null ? String.valueOf(dtObj).trim() : "";
+            if (dt.isEmpty() || "null".equals(dt)) continue;
+            int[] counts = dateMap.computeIfAbsent(dt, k -> new int[3]);
+            String risk = String.valueOf(a.getOrDefault("riskLevel", ""));
+            switch (risk) {
+                case "high"   -> counts[0]++;
+                case "medium" -> counts[1]++;
+                case "low"    -> counts[2]++;
+            }
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<String, int[]> e : dateMap.entrySet()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("date", e.getKey());
+            m.put("highRisk", e.getValue()[0]);
+            m.put("mediumRisk", e.getValue()[1]);
+            m.put("lowRisk", e.getValue()[2]);
+            result.add(m);
+        }
+        return result;
     }
 
     private List<Map<String, Object>> parseModelComparison(String csv) throws Exception {

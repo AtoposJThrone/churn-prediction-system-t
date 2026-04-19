@@ -517,7 +517,10 @@
           <td>${escHtml(j.triggerSource || '—')}</td>
           <td>${fmtTime(j.createdAt)}</td>
           <td>${fmtTime(j.finishedAt)}</td>
-          <td><button class="btn btn-outline btn-sm" onclick="viewJobLog(${j.id})">查看日志</button></td>
+          <td style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="viewJobLog(${j.id})">查看日志</button>
+            ${(j.status === 'RUNNING' || j.status === 'PENDING') ? `<button class="btn btn-sm" style="background:#e53e3e;color:#fff;border:none;" onclick="cancelJob(${j.id})">中止</button>` : ''}
+          </td>
         </tr>`).join('');
     }
 
@@ -560,6 +563,17 @@
             logContent.textContent = '读取失败：' + err.message;
         }
     }
+
+    window.cancelJob = async (jobId) => {
+        if (!confirm(`确定要中止任务 #${jobId} 吗？`)) return;
+        try {
+            await api.cancelJob(jobId);
+            showFlash(flashEl, `任务 #${jobId} 已中止`, 'success');
+            loadJobs();
+        } catch (err) {
+            showFlash(flashEl, '中止失败：' + err.message, 'error');
+        }
+    };
 
     document.getElementById('closeLogModal').addEventListener('click', () => {
         clearInterval(logPollingTimer);

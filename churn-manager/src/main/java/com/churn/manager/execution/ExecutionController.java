@@ -104,6 +104,11 @@ public class ExecutionController {
         return ApiResponse.ok(toJobView(executionService.refreshAndGet(jobId)));
     }
 
+    @PostMapping("/api/jobs/{jobId}/cancel")
+    public ApiResponse<Map<String, Object>> cancelJob(@PathVariable Long jobId) {
+        return ApiResponse.ok(toJobView(executionService.cancelJob(jobId)));
+    }
+
     @GetMapping("/api/jobs/{jobId}/log")
     public ApiResponse<Map<String, Object>> getLog(@PathVariable Long jobId) {
         // Refresh status first

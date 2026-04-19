@@ -45,7 +45,7 @@ app:
     secret-key: ${MANAGER_SECRET_KEY:S7DbBkp9Gca/hPmGYt7BOHqJ1KfSvcnJERe/vcaU9ic=}
   jobs:
     log-subdir: ${MANAGER_LOG_SUBDIR:manager-jobs} # 日志文件存储在 ./runtime/manager-jobs/ 
-    preview-lines: ${MANAGER_LOG_PREVIEW_LINES:200} # 预览日志时显示的行数
+    preview-lines: ${MANAGER_LOG_PREVIEW_LINES:1000} # 预览日志时显示的行数
   init:
     # 首次创建生成的默认管理员账号，环境变量优先，默认为 admin/adminmvp123
     admin-username: ${INIT_ADMIN_USERNAME:admin}

@@ -26,6 +26,8 @@ public record ProjectRequest(
         String pythonCommand,
         String sparkSubmitCommand,
         String beelineCommand,
+        String hadoopConfDir,
+        String yarnConfDir,
         // SSH credentials (sensitive)
         String sshUsername,
         String sshPassword,

@@ -20,7 +20,8 @@
     const modelCht = echarts.init(document.getElementById('modelChart'), 'dark');
     const featCht  = echarts.init(document.getElementById('featChart'),  'dark');
     const distCht  = echarts.init(document.getElementById('distChart'),  'dark');
-    window.addEventListener('resize', () => [pieCht, trendCht, modelCht, featCht, distCht].forEach(c => c.resize()));
+    const mapHotCht = echarts.init(document.getElementById('mapHotspotChart'), 'dark');
+    window.addEventListener('resize', () => [pieCht, trendCht, modelCht, featCht, distCht, mapHotCht].forEach(c => c.resize()));
 
     // 共用暗色轴线样式
     const AXIS_COLOR = '#8b949e';
@@ -72,7 +73,7 @@
         try { renderRiskTrend(data.riskTrend); } catch(e) { console.warn('Trend render failed', e); }
         try { renderModelComparison(data.modelComparison); } catch(e) { console.warn('Model render failed', e); }
         try { renderFeatureImportance(data.featureImportance); } catch(e) { console.warn('Feature render failed', e); }
-        try { renderChurnProbDist(data.recentAlerts); } catch(e) { console.warn('Dist render failed', e); }
+        try { renderChurnProbDist(data.churnProbDistribution || data.recentAlerts); } catch(e) { console.warn('Dist render failed', e); }
         try { setAlerts(data.recentAlerts); } catch(e) { console.warn('Alerts render failed', e); }
         try { renderMapHotspot(data.mapHotspot); } catch(e) { console.warn('MapHotspot render failed', e); }
     }
@@ -94,50 +95,80 @@
         document.getElementById('kpiStuckMap2').textContent  = s?.topStuckMapId2 ?? '—';
     }
 
-    // ---- 关卡卡关热力图（横向柱状图，按失败率降序）----
+    // ---- 关卡卡关热力图（ECharts 热力图，多维度评估）----
     function renderMapHotspot(rows) {
-        const el = document.getElementById('mapHotspotChart');
-        if (!el) return;
         if (!rows || rows.length === 0) {
-            echarts.init(el, 'dark').setOption({
+            mapHotCht.setOption({
                 backgroundColor: BG,
                 title: { text: '暂无关卡卡关数据', textStyle: { color: AXIS_COLOR, fontSize: 13 }, left: 'center', top: 'middle' }
             }, true);
             return;
         }
-        // 将难度层映射到颜色
-        const tierColor = { easy: '#3fb950', normal: '#e3b341', hard: '#f85149', extreme: '#c678dd' };
-        const mapIds    = rows.map(r => 'Map ' + (r.map_id ?? r.mapId ?? ''));
-        const failRates = rows.map(r => +(r.fail_rate ?? r.failRate ?? 0) * 100);
-        const tiers     = rows.map(r => r.difficulty_tier ?? r.difficultyTier ?? 'normal');
-        const colors    = tiers.map(t => tierColor[t] || '#58a6ff');
+        // Sort by fail rate descending, take top 20
+        const sorted = [...rows].sort((a, b) =>
+            (+(b.fail_rate ?? b.failRate ?? 0)) - (+(a.fail_rate ?? a.failRate ?? 0))
+        ).slice(0, 20);
 
-        const cht = echarts.init(el, 'dark');
-        cht.setOption({
+        const mapLabels = sorted.map(r => {
+            const tier = r.difficulty_tier ?? r.difficultyTier ?? '';
+            return 'Map ' + (r.map_id ?? r.mapId ?? '') + ' (' + tier + ')';
+        });
+        const metrics = ['失败率', '求助率', '平均血量比', '高风险占比'];
+
+        const data = [];
+        sorted.forEach((r, yi) => {
+            const failRate = +(r.fail_rate ?? r.failRate ?? 0);
+            const helpRate = +(r.help_usage_rate ?? r.helpUsageRate ?? 0);
+            const hpRatio  = +(r.avg_hp_ratio ?? r.avgHpRatio ?? 0);
+            const players  = +(r.player_count ?? r.playerCount ?? 1);
+            const hrCount  = +(r.high_risk_player_count ?? r.highRiskPlayerCount ?? 0);
+            const hrRatio  = players > 0 ? hrCount / players : 0;
+            data.push([0, yi, +failRate.toFixed(4)]);
+            data.push([1, yi, +helpRate.toFixed(4)]);
+            data.push([2, yi, +hpRatio.toFixed(4)]);
+            data.push([3, yi, +hrRatio.toFixed(4)]);
+        });
+
+        mapHotCht.setOption({
             backgroundColor: BG,
             tooltip: {
-                trigger: 'axis',
-                axisPointer: { type: 'shadow' },
+                position: 'top',
                 formatter: function(params) {
-                    const idx = params[0].dataIndex;
-                    const r = rows[idx];
-                    return `<b>${mapIds[idx]}</b><br/>失败率: ${failRates[idx].toFixed(1)}%<br/>难度: ${tiers[idx]}<br/>玩家数: ${r.player_count ?? r.playerCount ?? '-'}<br/>高风险玩家: ${r.high_risk_player_count ?? r.highRiskPlayerCount ?? '-'}`;
+                    const r = sorted[params.data[1]];
+                    const tier = r.difficulty_tier ?? r.difficultyTier ?? '-';
+                    return '<b>' + mapLabels[params.data[1]] + '</b><br/>'
+                        + metrics[params.data[0]] + ': ' + (params.data[2] * 100).toFixed(1) + '%<br/>'
+                        + '玩家数: ' + (r.player_count ?? r.playerCount ?? '-') + '<br/>'
+                        + '高风险玩家: ' + (r.high_risk_player_count ?? r.highRiskPlayerCount ?? '-');
                 }
             },
-            grid: { left: 100, right: 30, top: 20, bottom: 40 },
+            grid: { left: 140, right: 90, top: 10, bottom: 40 },
             xAxis: {
-                type: 'value', name: '失败率 (%)', max: 100,
-                axisLabel: { color: AXIS_COLOR }, axisLine: { lineStyle: { color: AXIS_COLOR } },
-                splitLine: { lineStyle: { color: '#30363d' } }
+                type: 'category', data: metrics, splitArea: { show: true },
+                axisLabel: { color: AXIS_COLOR, fontSize: 11 },
+                axisLine: AXIS_LINE
             },
             yAxis: {
-                type: 'category', data: mapIds,
+                type: 'category', data: mapLabels, splitArea: { show: true },
                 axisLabel: { color: AXIS_COLOR, fontSize: 11 },
-                axisLine: { lineStyle: { color: AXIS_COLOR } }
+                axisLine: AXIS_LINE
+            },
+            visualMap: {
+                min: 0, max: 1, calculable: true,
+                orient: 'vertical', right: 10, top: 'center',
+                inRange: { color: ['#3fb950', '#e3b341', '#f85149'] },
+                textStyle: { color: AXIS_COLOR }
             },
             series: [{
-                type: 'bar', data: failRates.map((v, i) => ({ value: v, itemStyle: { color: colors[i] } })),
-                label: { show: true, position: 'right', formatter: p => p.value.toFixed(1) + '%', color: AXIS_COLOR, fontSize: 11 }
+                type: 'heatmap',
+                data: data,
+                label: {
+                    show: true, color: '#fff', fontSize: 10,
+                    formatter: function(p) { return (p.data[2] * 100).toFixed(0) + '%'; }
+                },
+                emphasis: {
+                    itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' }
+                }
             }]
         }, true);
     }
@@ -234,13 +265,21 @@
     }
 
     // ---- 流失概率分布直方图 ----
-    function renderChurnProbDist(alerts) {
-        if (!alerts?.length) return;
-        const buckets = Array(10).fill(0);
-        alerts.forEach(a => {
-            const idx = Math.min(9, Math.floor((parseFloat(a.churnProb) || 0) * 10));
-            buckets[idx]++;
-        });
+    function renderChurnProbDist(distOrAlerts) {
+        let buckets;
+        if (Array.isArray(distOrAlerts) && distOrAlerts.length === 10 && typeof distOrAlerts[0] === 'number') {
+            // Pre-computed distribution (10 buckets)
+            buckets = distOrAlerts;
+        } else if (Array.isArray(distOrAlerts)) {
+            // Fallback: compute from alerts array
+            buckets = Array(10).fill(0);
+            distOrAlerts.forEach(a => {
+                const idx = Math.min(9, Math.max(0, Math.floor((parseFloat(a.churnProb) || 0) * 10)));
+                buckets[idx]++;
+            });
+        } else {
+            return;
+        }
         const labels = ['0–10%','10–20%','20–30%','30–40%','40–50%','50–60%','60–70%','70–80%','80–90%','90–100%'];
         distCht.setOption({
             backgroundColor: BG,
@@ -302,7 +341,7 @@
             }
             return va < vb ? _sortDir : va > vb ? -_sortDir : 0;
         });
-        rows = rows.slice(0, 50);
+        rows = rows.slice(0, 30);
         // 更新排序箭头图标
         ['churnProb', 'riskLevel', 'finalAlert', 'topReason'].forEach(f => {
             const el = document.getElementById('sort_' + f);

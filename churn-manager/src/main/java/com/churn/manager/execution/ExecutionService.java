@@ -187,6 +187,30 @@ public class ExecutionService {
     // Job status & log
     // -------------------------------------------------------------------------
 
+    @Transactional
+    public JobRecord cancelJob(Long jobId) {
+        JobRecord job = jobRepo.findById(jobId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "任务不存在。"));
+        if (job.getStatus() != JobStatus.RUNNING && job.getStatus() != JobStatus.PENDING) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "只有运行中或等待中的任务可以中止。");
+        }
+        if (job.getPid() != null) {
+            ManagedProject p = projectService.getOrThrow(job.getProjectId());
+            DecryptedSecrets s = projectService.decryptSecrets(job.getProjectId());
+            try {
+                // Kill the process group to also terminate child processes (spark-submit, etc.)
+                sshClient.executeCommand(p.getHost(), p.getSshPort(),
+                        s.sshUsername(), s.sshPassword(), s.sshPrivateKey(),
+                        "kill -TERM -" + job.getPid() + " 2>/dev/null; kill -TERM " + job.getPid() + " 2>/dev/null; true");
+            } catch (Exception ignored) {
+                // Best-effort kill; still mark cancelled
+            }
+        }
+        job.setStatus(JobStatus.CANCELLED);
+        job.setFinishedAt(Instant.now());
+        return jobRepo.save(job);
+    }
+
     @Transactional(readOnly = true)
     public org.springframework.data.domain.Page<JobRecord> listJobs(Long projectId,
                                                                      org.springframework.data.domain.Pageable pageable) {

@@ -202,6 +202,8 @@ public class ProjectController {
         m.put("pythonCommand", p.getPythonCommand());
         m.put("sparkSubmitCommand", p.getSparkSubmitCommand());
         m.put("beelineCommand", p.getBeelineCommand());
+        m.put("hadoopConfDir", p.getHadoopConfDir());
+        m.put("yarnConfDir", p.getYarnConfDir());
         // Retrieve non-sensitive secret fields
         ProjectSecret s = p.getSecret();
         if (s != null) {

@@ -73,6 +73,7 @@ const api = {
     runPipeline:       (pid, lid, overrides) => apiFetch('POST', `/api/projects/${pid}/pipelines/${lid}/run`, { overrides }),
     listJobs:          (pid, page, size) => apiFetch('GET', `/api/projects/${pid}/jobs?page=${page||0}&size=${size||20}`),
     getJob:            (jid)         => apiFetch('GET',    `/api/jobs/${jid}`),
+    cancelJob:         (jid)         => apiFetch('POST',   `/api/jobs/${jid}/cancel`),
     getJobLog:         (jid)         => apiFetch('GET',    `/api/jobs/${jid}/log`),
 
     // Schedules

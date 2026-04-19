@@ -52,6 +52,11 @@ public class ManagedProject {
     private String sparkSubmitCommand;
     @Column(length = 500)
     private String beelineCommand;
+    // Hadoop/YARN 环境变量（spark-submit --master yarn 必需）
+    @Column(length = 500)
+    private String hadoopConfDir;
+    @Column(length = 500)
+    private String yarnConfDir;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -109,6 +114,10 @@ public class ManagedProject {
     public void setSparkSubmitCommand(String sparkSubmitCommand) { this.sparkSubmitCommand = sparkSubmitCommand; }
     public String getBeelineCommand() { return beelineCommand; }
     public void setBeelineCommand(String beelineCommand) { this.beelineCommand = beelineCommand; }
+    public String getHadoopConfDir() { return hadoopConfDir; }
+    public void setHadoopConfDir(String hadoopConfDir) { this.hadoopConfDir = hadoopConfDir; }
+    public String getYarnConfDir() { return yarnConfDir; }
+    public void setYarnConfDir(String yarnConfDir) { this.yarnConfDir = yarnConfDir; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public ProjectSecret getSecret() { return secret; }

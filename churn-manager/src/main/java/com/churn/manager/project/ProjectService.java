@@ -111,6 +111,19 @@ public class ProjectService {
                 fallback(p.getLogsDir(), hasRoot ? root + "/logs" : null));
         putIfNotNull(env, "TD_CHURN_HDFS_LANDING_DIR", p.getHdfsLandingDir());
         putIfNotNull(env, "TD_CHURN_HIVE_DB", p.getHiveDb());
+        // Hadoop/YARN 环境变量（spark-submit --master yarn 必需）
+        putIfNotNull(env, "HADOOP_CONF_DIR", p.getHadoopConfDir());
+        putIfNotNull(env, "YARN_CONF_DIR",
+                p.getYarnConfDir() != null && !p.getYarnConfDir().isBlank()
+                        ? p.getYarnConfDir() : p.getHadoopConfDir()); // 未单独配置时用同一目录兼容
+        // 从 sparkSubmitCommand 推导 SPARK_HOME（Python 脚本的 MySQL JAR 自动探测需要）
+        String sparkCmd = p.getSparkSubmitCommand();
+        if (sparkCmd != null) {
+            int idx = sparkCmd.indexOf("/bin/spark-submit");
+            if (idx > 0) {
+                putIfNotNull(env, "SPARK_HOME", sparkCmd.substring(0, idx));
+            }
+        }
         // Database credentials
         putIfNotNull(env, "TD_CHURN_DB_URL", s.mysqlUrl());
         putIfNotNull(env, "TD_CHURN_DB_USER", s.mysqlUsername());
@@ -148,6 +161,10 @@ public class ProjectService {
         if (req.pythonCommand() != null) p.setPythonCommand(req.pythonCommand());
         if (req.sparkSubmitCommand() != null) p.setSparkSubmitCommand(req.sparkSubmitCommand());
         if (req.beelineCommand() != null) p.setBeelineCommand(req.beelineCommand());
+        if (req.hadoopConfDir() != null) p.setHadoopConfDir(req.hadoopConfDir());
+        if (req.yarnConfDir() != null) p.setYarnConfDir(req.yarnConfDir());
+        if (req.hadoopConfDir() != null) p.setHadoopConfDir(req.hadoopConfDir());
+        if (req.yarnConfDir() != null) p.setYarnConfDir(req.yarnConfDir());
     }
 
     private void upsertSecret(ManagedProject p, ProjectRequest req, boolean isCreate) {

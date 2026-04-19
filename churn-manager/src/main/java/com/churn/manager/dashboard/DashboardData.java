@@ -13,7 +13,8 @@ public record DashboardData(
         List<Map<String, Object>> recentAlerts,     // [{userId, churnProb, riskLevel, topReason}]
         List<Map<String, Object>> mapHotspot,       // [{mapId, difficultyTier, failRate, ...}] 关卡卡关热力图
         double avgChurnProb,
-        String dataSource                           // "remote" | "mysql" | "fallback"
+        String dataSource,                          // "remote" | "mysql" | "fallback"
+        List<Integer> churnProbDistribution         // [count_0_10, count_10_20, ..., count_90_100] 10 buckets
 ) {
     public record DailySummary(
             String statDate,

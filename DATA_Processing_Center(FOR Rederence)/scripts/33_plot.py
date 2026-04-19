@@ -95,7 +95,7 @@ save(fig, "roc_curves.png")
 # 3. 四模型各指标柱状图（全量特征）
 # ══════════════════════════════════════════════════════════════
 print("[PLOT] 模型指标对比柱状图 ...")
-full_df  = df[df["window"] == "全量"].copy()
+full_df  = df[df["window"] == "full"].copy()
 metrics  = ["auc", "f1", "accuracy", "precision", "recall"]
 metric_names = {"auc":"AUC", "f1":"F1", "accuracy":"准确率",
                 "precision":"精确率", "recall":"召回率"}
@@ -127,7 +127,7 @@ save(fig, "model_comparison_bar.png")
 # ══════════════════════════════════════════════════════════════
 print("[PLOT] 时间窗口实验图 ...")
 window_df = df[df["model"].isin(["LightGBM", "XGBoost"])].copy()
-window_order = {"D1": 0, "D3": 1, "全量": 2}
+window_order = {"D1": 0, "D3": 1, "full": 2}
 window_df["window_order"] = window_df["window"].map(window_order)
 window_df = window_df.sort_values("window_order")
 
@@ -148,7 +148,7 @@ for ax, metric in zip(axes, ["auc", "f1"]):
     ax.set_ylabel(metric.upper())
     ax.set_ylim(0.5, 1.05)
     ax.legend()
-    ax.set_xticks(["D1","D3","全量"])
+    ax.set_xticks(["D1","D3","full"])
     ax.set_xticklabels(["仅首日(D1)","前3天(D3)","全量观测期"])
 fig.suptitle("不同时间窗口对流失预测效果的影响", fontsize=13, y=1.02)
 plt.tight_layout()
@@ -186,7 +186,7 @@ for model_name, fname in [("LightGBM","feat_imp_lightgbm.csv"),
 # 6. 混淆矩阵（四模型，2×2 布局）
 # ══════════════════════════════════════════════════════════════
 print("[PLOT] 混淆矩阵 ...")
-full_rows = df[df["window"] == "全量"]
+full_rows = df[df["window"] == "full"]
 fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 axes = axes.flatten()
 

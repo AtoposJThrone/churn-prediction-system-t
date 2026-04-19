@@ -163,6 +163,16 @@
             <input name="beelineCommand" type="text" class="form-control" placeholder="例：beeline -u jdbc:hive2://localhost:10000">
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">HADOOP_CONF_DIR <span class="text-muted">（spark-submit --master yarn 必填）</span></label>
+            <input name="hadoopConfDir" type="text" class="form-control" placeholder="例：/etc/hadoop/conf">
+          </div>
+          <div class="form-group">
+            <label class="form-label">YARN_CONF_DIR <span class="text-muted">（留空时与 HADOOP_CONF_DIR 相同）</span></label>
+            <input name="yarnConfDir" type="text" class="form-control" placeholder="例：/etc/hadoop/conf（通常与上方相同）">
+          </div>
+        </div>
 
         <!-- Hive / HDFS -->
         <p class="nav-section-title" style="padding:0;margin-bottom:10px;margin-top:8px;color:#888;">Hive / HDFS</p>

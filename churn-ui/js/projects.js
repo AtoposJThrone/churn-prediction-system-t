@@ -95,6 +95,8 @@
         v('pythonCommand', p?.pythonCommand || 'python3');
         v('sparkSubmitCommand', p?.sparkSubmitCommand || 'spark-submit --master yarn --deploy-mode client');
         v('beelineCommand', p?.beelineCommand || 'beeline -u');
+        v('hadoopConfDir', p?.hadoopConfDir || '');
+        v('yarnConfDir', p?.yarnConfDir || '');
         // credentials: leave blank on edit (server won't overwrite empty)
         v('sshUsername', p?.sshUsername); v('sshPassword', ''); v('sshPrivateKey', '');
         v('mysqlUrl', p?.mysqlUrl); v('mysqlUsername', p?.mysqlUsername); v('mysqlPassword', '');
@@ -179,6 +181,8 @@
             hiveDb: g('hiveDb'), hdfsLandingDir: g('hdfsLandingDir'),
             pythonCommand: g('pythonCommand'), sparkSubmitCommand: g('sparkSubmitCommand'),
             beelineCommand: g('beelineCommand'),
+            hadoopConfDir: g('hadoopConfDir') || null,
+            yarnConfDir: g('yarnConfDir') || null,
             sshUsername: g('sshUsername'), sshPassword: g('sshPassword') || null,
             sshPrivateKey: g('sshPrivateKey') || null,
             mysqlUrl: g('mysqlUrl'), mysqlUsername: g('mysqlUsername'), mysqlPassword: g('mysqlPassword') || null,
